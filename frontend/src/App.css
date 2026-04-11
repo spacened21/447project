@@ -18,24 +18,21 @@ body {
   align-items: center;
 }
 
-/* Main container */
 .container {
   background: white;
   padding: 2rem;
   border-radius: 12px;
-  width: 350px;
+  width: 380px;
   box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
   text-align: center;
 }
 
-/* Title */
 h1 {
   margin-top: 0;
   margin-bottom: 1.5rem;
   color: #111827;
 }
 
-/* Labels */
 label {
   display: block;
   text-align: left;
@@ -44,8 +41,8 @@ label {
   color: #374151;
 }
 
-/* Inputs */
-input {
+input,
+select {
   box-sizing: border-box;
   width: 100%;
   padding: 0.75rem;
@@ -57,13 +54,13 @@ input {
   font-size: 1rem;
 }
 
-input:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: #2563eb;
   background-color: white;
 }
 
-/* Button */
 button {
   width: 100%;
   padding: 0.75rem;
@@ -73,13 +70,27 @@ button {
   border-radius: 6px;
   font-size: 1rem;
   cursor: pointer;
+  margin-top: 0.5rem;
 }
 
 button:hover {
   background-color: #b91c1c;
 }
 
+.secondary-button {
+  background-color: #2563eb;
+}
+
+.secondary-button:hover {
+  background-color: #1d4ed8;
+}
+
 .error {
-  color: red;
+  color: #dc2626;
+  margin-top: 1rem;
+}
+
+.success {
+  color: #16a34a;
   margin-top: 1rem;
 }
