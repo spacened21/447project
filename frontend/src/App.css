@@ -94,3 +94,8 @@ button:hover {
   color: #16a34a;
   margin-top: 1rem;
 }
+
+.logo {
+  width: 250px;
+  margin-bottom: 1rem;
+}
