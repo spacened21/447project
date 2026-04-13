@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import logo from "./assets/logo.webp";
 
 function App() {
   const [isRegistering, setIsRegistering] = useState(false);
@@ -11,11 +10,14 @@ function App() {
   const [role, setRole] = useState("user");
 
   const [loggedInUser, setLoggedInUser] = useState(null);
+  const [inventoryItems, setInventoryItems] = useState([]);
+  const [showInventory, setShowInventory] = useState(false);
+
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/session/", {
+    fetch("http://localhost:8000/api/session/", {
       credentials: "include",
     })
       .then((res) => res.json())
@@ -44,7 +46,7 @@ function App() {
     setMessage("");
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/login/", {
+      const res = await fetch("http://localhost:8000/api/login/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -76,7 +78,7 @@ function App() {
     setMessage("");
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/register/", {
+      const res = await fetch("http://localhost:8000/api/register/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -106,30 +108,125 @@ function App() {
   };
 
   const handleLogout = async () => {
-    await fetch("http://127.0.0.1:8000/api/logout/", {
+    await fetch("http://localhost:8000/api/logout/", {
       method: "POST",
       credentials: "include",
     });
 
     setLoggedInUser(null);
+    setInventoryItems([]);
+    setShowInventory(false);
     setMessage("");
     setError("");
   };
 
+  const handleLoadInventory = async () => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await fetch("http://localhost:8000/api/inventory/", {
+        credentials: "include",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not load inventory");
+        return;
+      }
+
+      setInventoryItems(data.items);
+      setShowInventory(true);
+    } catch {
+      setError("Could not connect to server");
+    }
+  };
+
+  const handleSeedInventory = async () => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await fetch("http://localhost:8000/api/inventory/seed/", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not create test inventory");
+        return;
+      }
+
+      setMessage(data.message);
+      handleLoadInventory();
+    } catch {
+      setError("Could not connect to server");
+    }
+  };
+
   if (loggedInUser) {
     return (
-      <div className="container">
+      <div className="dashboard-container">
         <h1>Welcome, {loggedInUser.username}</h1>
         <p>Email: {loggedInUser.email}</p>
         <p>Role: {loggedInUser.role}</p>
-        <button onClick={handleLogout}>Log Out</button>
+
+        <div className="button-row">
+          <button onClick={handleLoadInventory}>View Inventory</button>
+          <button onClick={handleSeedInventory}>Create Test Data</button>
+          <button onClick={handleLogout}>Log Out</button>
+        </div>
+
+        {message && <p className="success">{message}</p>}
+        {error && <p className="error">{error}</p>}
+
+        {showInventory && (
+          <div className="inventory-section">
+            <h2>Inventory Items</h2>
+
+            {inventoryItems.length === 0 ? (
+              <p>No inventory items found.</p>
+            ) : (
+              <table className="inventory-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Type</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                    <th>Supplier</th>
+                    <th>Created By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inventoryItems.map((item) => (
+                    <tr key={item.item_id}>
+                      <td>{item.item_id}</td>
+                      <td>{item.name}</td>
+                      <td>{item.description}</td>
+                      <td>{item.type}</td>
+                      <td>{item.quantity}</td>
+                      <td>${item.price}</td>
+                      <td>{item.supplier}</td>
+                      <td>{item.created_by}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="container">
-      <img src={logo} alt="Logo" className="logo" />
       <h1>{isRegistering ? "Register" : "Login"}</h1>
 
       <form onSubmit={isRegistering ? handleRegister : handleLogin}>

@@ -18,16 +18,23 @@ body {
   align-items: center;
 }
 
-.container {
+.container,
+.dashboard-container {
   background: white;
   padding: 2rem;
   border-radius: 12px;
-  width: 380px;
+  width: 90%;
+  max-width: 1100px;
   box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
   text-align: center;
 }
 
-h1 {
+.container {
+  max-width: 380px;
+}
+
+h1,
+h2 {
   margin-top: 0;
   margin-bottom: 1.5rem;
   color: #111827;
@@ -62,8 +69,7 @@ select:focus {
 }
 
 button {
-  width: 100%;
-  padding: 0.75rem;
+  padding: 0.75rem 1rem;
   background-color: #dc2626;
   color: white;
   border: none;
@@ -78,11 +84,47 @@ button:hover {
 }
 
 .secondary-button {
+  width: 100%;
   background-color: #2563eb;
 }
 
 .secondary-button:hover {
   background-color: #1d4ed8;
+}
+
+.button-row {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.inventory-section {
+  margin-top: 2rem;
+  overflow-x: auto;
+}
+
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.inventory-table th,
+.inventory-table td {
+  border: 1px solid #d1d5db;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.inventory-table th {
+  background-color: #e5e7eb;
+  color: #111827;
+}
+
+.inventory-table td {
+  background-color: #f9fafb;
 }
 
 .error {
@@ -93,9 +135,4 @@ button:hover {
 .success {
   color: #16a34a;
   margin-top: 1rem;
-}
-
-.logo {
-  width: 250px;
-  margin-bottom: 1rem;
 }
