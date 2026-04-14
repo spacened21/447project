@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import logo from "./assets/logo.webp";
 import "./App.css";
 
 function App() {
@@ -227,6 +228,7 @@ function App() {
 
   return (
     <div className="container">
+    <img src={logo} alt="Logo" className="logo" />
       <h1>{isRegistering ? "Register" : "Login"}</h1>
 
       <form onSubmit={isRegistering ? handleRegister : handleLogin}>
