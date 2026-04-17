@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import logo from "../assets/logo.webp";
 
 function DashboardPage({
   loggedInUser,
@@ -12,6 +13,7 @@ function DashboardPage({
   return (
     <div className="page-wrapper">
       <div className="dashboard-container">
+        <img src={logo} alt="Logo" className="logo" />
         <h1>Welcome, {loggedInUser.username}</h1>
         <p>Email: {loggedInUser.email}</p>
         <p>Role: {loggedInUser.role}</p>

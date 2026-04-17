@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import logo from "../assets/logo.webp";
 
 function InventoryPage({ inventoryItems, onLoadInventory, message, error }) {
   const navigate = useNavigate();
@@ -8,6 +9,7 @@ function InventoryPage({ inventoryItems, onLoadInventory, message, error }) {
   return (
     <div className="page-wrapper">
       <div className="dashboard-container">
+        <img src={logo} alt="Logo" className="logo" />
         <h1>Inventory</h1>
 
         <div className="button-row">

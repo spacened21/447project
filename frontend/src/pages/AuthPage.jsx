@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { apiFetch } from "../api";
+import logo from "../assets/logo.webp";
 
 function AuthPage({
   setLoggedInUser,
@@ -85,6 +86,7 @@ function AuthPage({
   return (
     <div className="centered-page">
       <div className="container">
+        <img src={logo} alt="Logo" className="logo" />
         <h1>{isRegistering ? "Register" : "Login"}</h1>
 
         <form onSubmit={isRegistering ? handleRegister : handleLogin}>
