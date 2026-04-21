@@ -125,6 +125,21 @@ button:hover {
   margin-bottom: 1rem;
 }
 
+.add-item-form {
+  text-align: left;
+  max-width: 480px;
+  margin: 1.5rem auto 0 auto;
+  padding: 1.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background-color: #f9fafb;
+}
+
+.add-item-form h2 {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
 .inventory-section {
   margin-top: 2rem;
   overflow-x: auto;

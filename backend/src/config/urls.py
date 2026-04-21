@@ -6,6 +6,8 @@ from api.views import (
     logout_view,
     session_view,
     inventory_list_view,
+    inventory_add_view,
+    inventory_delete_view,
     seed_inventory_view,
 )
 
@@ -16,5 +18,7 @@ urlpatterns = [
     path("api/logout/", logout_view),
     path("api/session/", session_view),
     path("api/inventory/", inventory_list_view),
+    path("api/inventory/add/", inventory_add_view),
+    path("api/inventory/<int:item_id>/", inventory_delete_view),
     path("api/inventory/seed/", seed_inventory_view),
 ]

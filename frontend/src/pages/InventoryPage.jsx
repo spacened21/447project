@@ -2,9 +2,54 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.webp";
 
-function InventoryPage({ inventoryItems, onLoadInventory, message, error }) {
+const EMPTY_FORM = {
+  name: "",
+  description: "",
+  type: "material",
+  quantity: "",
+  price: "",
+  supplier: "",
+};
+
+function InventoryPage({
+  inventoryItems,
+  onLoadInventory,
+  onAddItem,
+  onDeleteItem,
+  message,
+  error,
+}) {
   const navigate = useNavigate();
-  const [placeholderMessage, setPlaceholderMessage] = useState("");
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [formValues, setFormValues] = useState(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleFieldChange = (e) => {
+    const { name, value } = e.target;
+    setFormValues((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmitAdd = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    const success = await onAddItem({
+      name: formValues.name,
+      description: formValues.description,
+      type: formValues.type,
+      quantity: Number(formValues.quantity),
+      price: formValues.price,
+      supplier: formValues.supplier,
+    });
+
+    setSubmitting(false);
+
+    if (success) {
+      setFormValues(EMPTY_FORM);
+      setShowAddForm(false);
+    }
+  };
 
   return (
     <div className="page-wrapper">
@@ -15,7 +60,8 @@ function InventoryPage({ inventoryItems, onLoadInventory, message, error }) {
         <div className="button-row">
           <button
             onClick={() => {
-              setPlaceholderMessage("");
+              setShowAddForm(false);
+              setDeleteMode(false);
               onLoadInventory();
             }}
           >
@@ -23,19 +69,21 @@ function InventoryPage({ inventoryItems, onLoadInventory, message, error }) {
           </button>
 
           <button
-            onClick={() =>
-              setPlaceholderMessage("Add item functionality coming soon.")
-            }
+            onClick={() => {
+              setDeleteMode(false);
+              setShowAddForm((prev) => !prev);
+            }}
           >
-            Add Items
+            {showAddForm ? "Cancel Add" : "Add Items"}
           </button>
 
           <button
-            onClick={() =>
-              setPlaceholderMessage("Delete item functionality coming soon.")
-            }
+            onClick={() => {
+              setShowAddForm(false);
+              setDeleteMode((prev) => !prev);
+            }}
           >
-            Delete Items
+            {deleteMode ? "Done Deleting" : "Delete Items"}
           </button>
         </div>
 
@@ -48,9 +96,80 @@ function InventoryPage({ inventoryItems, onLoadInventory, message, error }) {
           </button>
         </div>
 
-        {placeholderMessage && <p className="success">{placeholderMessage}</p>}
         {message && <p className="success">{message}</p>}
         {error && <p className="error">{error}</p>}
+
+        {showAddForm && (
+          <form className="add-item-form" onSubmit={handleSubmitAdd}>
+            <h2>Add New Item</h2>
+
+            <label htmlFor="name">Name</label>
+            <input
+              id="name"
+              name="name"
+              value={formValues.name}
+              onChange={handleFieldChange}
+              required
+            />
+
+            <label htmlFor="description">Description</label>
+            <input
+              id="description"
+              name="description"
+              value={formValues.description}
+              onChange={handleFieldChange}
+              required
+            />
+
+            <label htmlFor="type">Type</label>
+            <select
+              id="type"
+              name="type"
+              value={formValues.type}
+              onChange={handleFieldChange}
+            >
+              <option value="material">Material</option>
+              <option value="equipment">Equipment</option>
+            </select>
+
+            <label htmlFor="quantity">Quantity</label>
+            <input
+              id="quantity"
+              name="quantity"
+              type="number"
+              min="0"
+              step="1"
+              value={formValues.quantity}
+              onChange={handleFieldChange}
+              required
+            />
+
+            <label htmlFor="price">Price</label>
+            <input
+              id="price"
+              name="price"
+              type="number"
+              min="0"
+              step="0.01"
+              value={formValues.price}
+              onChange={handleFieldChange}
+              required
+            />
+
+            <label htmlFor="supplier">Supplier</label>
+            <input
+              id="supplier"
+              name="supplier"
+              value={formValues.supplier}
+              onChange={handleFieldChange}
+              required
+            />
+
+            <button type="submit" disabled={submitting}>
+              {submitting ? "Adding..." : "Submit"}
+            </button>
+          </form>
+        )}
 
         <div className="inventory-section">
           {inventoryItems.length === 0 ? (
@@ -67,6 +186,7 @@ function InventoryPage({ inventoryItems, onLoadInventory, message, error }) {
                   <th>Price</th>
                   <th>Supplier</th>
                   <th>Created By</th>
+                  {deleteMode && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -80,6 +200,16 @@ function InventoryPage({ inventoryItems, onLoadInventory, message, error }) {
                     <td>${item.price}</td>
                     <td>{item.supplier}</td>
                     <td>{item.created_by}</td>
+                    {deleteMode && (
+                      <td>
+                        <button
+                          className="small-button"
+                          onClick={() => onDeleteItem(item.item_id)}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

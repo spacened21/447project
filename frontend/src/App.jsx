@@ -63,6 +63,57 @@ function App() {
     }
   };
 
+  const handleAddItem = async (itemData) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch("/api/inventory/add/", {
+        method: "POST",
+        body: JSON.stringify(itemData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not add item");
+        return false;
+      }
+
+      setInventoryItems((prev) => [...prev, data.item]);
+      setMessage(data.message);
+      return true;
+    } catch {
+      setError("Could not connect to server");
+      return false;
+    }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch(`/api/inventory/${itemId}/`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not delete item");
+        return;
+      }
+
+      setInventoryItems((prev) =>
+        prev.filter((item) => item.item_id !== itemId)
+      );
+      setMessage(data.message);
+    } catch {
+      setError("Could not connect to server");
+    }
+  };
+
   const handleSeedInventory = async () => {
     setError("");
     setMessage("");
@@ -133,6 +184,8 @@ function App() {
             <InventoryPage
               inventoryItems={inventoryItems}
               onLoadInventory={handleLoadInventory}
+              onAddItem={handleAddItem}
+              onDeleteItem={handleDeleteItem}
               message={message}
               error={error}
             />
