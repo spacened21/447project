@@ -84,77 +84,138 @@ function AuthPage({
   };
 
   return (
-    <div className="centered-page">
-      <div className="container">
-        <img src={logo} alt="Logo" className="logo" />
-        <h1>{isRegistering ? "Register" : "Login"}</h1>
-
-        <form onSubmit={isRegistering ? handleRegister : handleLogin}>
+    <div className="auth-shell">
+      <aside className="auth-shell__brand">
+        <div className="auth-shell__brand-inner">
+          <img src={logo} alt="Stratus" className="auth-shell__brand-logo" />
           <div>
-            <label>Username</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
+            <h1 className="auth-shell__headline">
+              Inventory that moves at the speed of your team.
+            </h1>
+            <p className="auth-shell__subtext">
+              Track materials, equipment, and suppliers in one modern dashboard
+              built for operations teams.
+            </p>
           </div>
+        </div>
 
-          {isRegistering && (
-            <div>
-              <label>Email</label>
+        <ul className="auth-shell__features">
+          <li className="auth-shell__feature">
+            <span className="auth-shell__feature-dot" />
+            Real-time inventory across every location
+          </li>
+          <li className="auth-shell__feature">
+            <span className="auth-shell__feature-dot" />
+            Role-based access for admins and operators
+          </li>
+          <li className="auth-shell__feature">
+            <span className="auth-shell__feature-dot" />
+            Audit trail on every adjustment
+          </li>
+        </ul>
+      </aside>
+
+      <section className="auth-shell__form-side">
+        <div className="card card--auth">
+          <span className="card__eyebrow">
+            {isRegistering ? "Create account" : "Welcome back"}
+          </span>
+          <h2 className="card__title">
+            {isRegistering ? "Join your team" : "Sign in to your workspace"}
+          </h2>
+          <p className="card__subtitle">
+            {isRegistering
+              ? "Set up credentials to get started with CoolSys."
+              : "Use your CoolSys credentials to continue."}
+          </p>
+
+          <form onSubmit={isRegistering ? handleRegister : handleLogin}>
+            <div className="field">
+              <label htmlFor="auth-username">Username</label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="auth-username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="jane.doe"
                 required
               />
             </div>
-          )}
 
-          <div>
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
+            {isRegistering && (
+              <div className="field">
+                <label htmlFor="auth-email">Email</label>
+                <input
+                  id="auth-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  required
+                />
+              </div>
+            )}
 
-          {isRegistering && (
-            <div>
-              <label>Role</label>
-              <select value={role} onChange={(e) => setRole(e.target.value)}>
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
+            <div className="field">
+              <label htmlFor="auth-password">Password</label>
+              <input
+                id="auth-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            {isRegistering && (
+              <div className="field">
+                <label htmlFor="auth-role">Role</label>
+                <select
+                  id="auth-role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            )}
+
+            <button type="submit" className="btn btn--primary btn--block">
+              {isRegistering ? "Create account" : "Log in"}
+            </button>
+          </form>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setIsRegistering(!isRegistering);
+              setError("");
+              setMessage("");
+              clearForm();
+            }}
+          >
+            {isRegistering
+              ? "Already have an account? Sign in"
+              : "Need an account? Register"}
+          </button>
+
+          {message && (
+            <div className="alert alert--success" role="status">
+              <span className="alert__dot" />
+              <span>{message}</span>
             </div>
           )}
-
-          <button type="submit">
-            {isRegistering ? "Register" : "Log In"}
-          </button>
-        </form>
-
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => {
-            setIsRegistering(!isRegistering);
-            setError("");
-            setMessage("");
-            clearForm();
-          }}
-        >
-          {isRegistering
-            ? "Already have an account? Log In"
-            : "Need an account? Register"}
-        </button>
-
-        {message && <p className="success">{message}</p>}
-        {error && <p className="error">{error}</p>}
-      </div>
+          {error && (
+            <div className="alert alert--error" role="alert">
+              <span className="alert__dot" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

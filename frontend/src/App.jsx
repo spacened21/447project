@@ -5,7 +5,6 @@ import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import InventoryPage from "./pages/InventoryPage";
 import { apiFetch } from "./api";
-import logo from "./assets/logo.webp";
 
 function App() {
   const [loggedInUser, setLoggedInUser] = useState(null);
