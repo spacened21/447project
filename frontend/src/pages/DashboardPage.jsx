@@ -1,81 +1,27 @@
-import { useNavigate, useLocation } from "react-router-dom";
-import logo from "../assets/logo.webp";
-
-function initials(name) {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
+import { useNavigate } from "react-router-dom";
+import Header from "../components/Header";
 
 function DashboardPage({
   loggedInUser,
   onLogout,
   onSeedInventory,
+  inventoryItems = [],
   message,
   error,
 }) {
   const navigate = useNavigate();
-  const location = useLocation();
+
+  // Calculate inventory metrics
+  const totalItems = inventoryItems.length;
+  const totalStock = inventoryItems.reduce((sum, item) => sum + item.quantity, 0);
+  const lowStockItems = inventoryItems
+    .filter((item) => item.quantity <= 10)
+    .sort((a, b) => a.quantity - b.quantity);
+  const lowStockCount = lowStockItems.length;
 
   return (
     <div className="app-shell">
-      <header className="app-nav">
-        <div className="app-nav__inner">
-          <div className="app-nav__brand">
-            <span className="app-nav__logo">
-              <img src={logo} alt="" />
-            </span>
-            <span className="app-nav__brand-name">
-              CoolSys
-              <small>Inventory Management System</small>
-            </span>
-          </div>
-
-          <nav className="app-nav__links" aria-label="Primary">
-            <button
-              className={`app-nav__link ${
-                location.pathname === "/dashboard"
-                  ? "app-nav__link--active"
-                  : ""
-              }`}
-              onClick={() => navigate("/dashboard")}
-            >
-              Dashboard
-            </button>
-            <button
-              className={`app-nav__link ${
-                location.pathname === "/inventory"
-                  ? "app-nav__link--active"
-                  : ""
-              }`}
-              onClick={() => navigate("/inventory")}
-            >
-              Inventory
-            </button>
-          </nav>
-
-          <div className="app-nav__right">
-            <div className="app-nav__user">
-              <span className="avatar" aria-hidden="true">
-                {initials(loggedInUser.username)}
-              </span>
-              <div>
-                <div className="app-nav__user-name">
-                  {loggedInUser.username}
-                </div>
-                <div className="app-nav__user-role">{loggedInUser.role}</div>
-              </div>
-            </div>
-            <button
-              className="btn btn--ghost small-button"
-              onClick={onLogout}
-            >
-              Log out
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header loggedInUser={loggedInUser} onLogout={onLogout} />
 
       <main className="app-main">
         <div className="app-container">
@@ -102,6 +48,98 @@ function DashboardPage({
               <span className="alert__dot" />
               <span>{error}</span>
             </div>
+          )}
+
+          {/* Stock Overview Section */}
+          <section>
+            <div className="page-header">
+              <div>
+                <span className="page-header__eyebrow">Stock overview</span>
+                <h2 className="page-header__title">Inventory at a glance</h2>
+              </div>
+            </div>
+
+            <div className="dashboard-metrics">
+              <div className="metric-card">
+                <span className="metric-card__icon metric-card__icon--blue">▤</span>
+                <div className="metric-card__content">
+                  <span className="metric-card__value">{totalItems}</span>
+                  <span className="metric-card__label">Total Items</span>
+                </div>
+              </div>
+
+              <div className="metric-card">
+                <span className="metric-card__icon metric-card__icon--green">◉</span>
+                <div className="metric-card__content">
+                  <span className="metric-card__value">{totalStock}</span>
+                  <span className="metric-card__label">Total Stock</span>
+                </div>
+              </div>
+
+              <div className="metric-card">
+                <span className="metric-card__icon metric-card__icon--orange">⚠</span>
+                <div className="metric-card__content">
+                  <span className="metric-card__value">{lowStockCount}</span>
+                  <span className="metric-card__label">Low Stock Alerts</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Low Stock Alerts Section */}
+          {lowStockItems.length > 0 && (
+            <section className="table-card">
+              <div className="table-card__header">
+                <div>
+                  <h2>Low Stock Items</h2>
+                </div>
+                <button
+                  className="btn btn--outline small-button"
+                  onClick={() => navigate("/inventory")}
+                >
+                  View all inventory →
+                </button>
+              </div>
+
+              <div className="table-wrapper">
+                <table className="inventory-table low-stock-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Type</th>
+                      <th>Quantity</th>
+                      <th>Supplier</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lowStockItems.map((item) => (
+                      <tr key={item.item_id}>
+                        <td>
+                          <strong>{item.name}</strong>
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              item.type === "equipment"
+                                ? "badge--red"
+                                : "badge--blue"
+                            }`}
+                          >
+                            {item.type}
+                          </span>
+                        </td>
+                        <td className="mono">
+                          <span className={item.quantity <= 5 ? "low-stock-critical" : "low-stock-warning"}>
+                            {item.quantity}
+                          </span>
+                        </td>
+                        <td>{item.supplier}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           )}
 
           <section>

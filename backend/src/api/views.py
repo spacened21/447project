@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout, get_user_model
-from .models import InventoryItem
+from .models import InventoryItem, MaterialRequest
 
 User = get_user_model()
 
@@ -134,6 +134,11 @@ def inventory_list_view(request):
 
     items = InventoryItem.objects.all().order_by("item_id")
 
+    # Filter by location if provided
+    location_filter = request.GET.get("location")
+    if location_filter and location_filter in ["warehouse", "yard", "jobsite"]:
+        items = items.filter(location=location_filter)
+
     data = []
     for item in items:
         data.append(
@@ -142,6 +147,7 @@ def inventory_list_view(request):
                 "name": item.name,
                 "description": item.description,
                 "type": item.type,
+                "location": item.location,
                 "quantity": item.quantity,
                 "price": str(item.price),
                 "supplier": item.supplier,
@@ -168,6 +174,7 @@ def inventory_add_view(request):
     name = data.get("name", "").strip()
     description = data.get("description", "").strip()
     item_type = data.get("type", "").strip().lower()
+    location = data.get("location", "warehouse").strip().lower()
     quantity = data.get("quantity")
     price = data.get("price")
     supplier = data.get("supplier", "").strip()
@@ -181,6 +188,12 @@ def inventory_add_view(request):
     if item_type not in ["material", "equipment"]:
         return JsonResponse(
             {"message": "Type must be 'material' or 'equipment'"},
+            status=400,
+        )
+
+    if location not in ["warehouse", "yard", "jobsite"]:
+        return JsonResponse(
+            {"message": "Location must be 'warehouse', 'yard', or 'jobsite'"},
             status=400,
         )
 
@@ -204,6 +217,7 @@ def inventory_add_view(request):
         name=name,
         description=description,
         type=item_type,
+        location=location,
         quantity=quantity,
         price=price,
         supplier=supplier,
@@ -219,6 +233,7 @@ def inventory_add_view(request):
                 "name": item.name,
                 "description": item.description,
                 "type": item.type,
+                "location": item.location,
                 "quantity": item.quantity,
                 "price": str(item.price),
                 "supplier": item.supplier,
@@ -266,6 +281,7 @@ def seed_inventory_view(request):
             "name": "Copper Pipe",
             "description": "3/4 inch copper plumbing pipe",
             "type": "material",
+            "location": "warehouse",
             "quantity": 120,
             "price": Decimal("14.99"),
             "supplier": "Home Supply Co",
@@ -274,6 +290,7 @@ def seed_inventory_view(request):
             "name": "Air Filter",
             "description": "Standard HVAC replacement filter",
             "type": "material",
+            "location": "yard",
             "quantity": 75,
             "price": Decimal("9.50"),
             "supplier": "Filter World",
@@ -282,6 +299,7 @@ def seed_inventory_view(request):
             "name": "Power Drill",
             "description": "Cordless drill for installations",
             "type": "equipment",
+            "location": "jobsite",
             "quantity": 8,
             "price": Decimal("129.99"),
             "supplier": "Tool Depot",
@@ -290,6 +308,7 @@ def seed_inventory_view(request):
             "name": "Thermostat",
             "description": "Programmable smart thermostat",
             "type": "equipment",
+            "location": "warehouse",
             "quantity": 15,
             "price": Decimal("89.99"),
             "supplier": "Climate Parts Inc",
@@ -301,6 +320,7 @@ def seed_inventory_view(request):
             name=item_data["name"],
             description=item_data["description"],
             type=item_data["type"],
+            location=item_data["location"],
             quantity=item_data["quantity"],
             price=item_data["price"],
             supplier=item_data["supplier"],
@@ -308,3 +328,142 @@ def seed_inventory_view(request):
         )
 
     return JsonResponse({"success": True, "message": "Test inventory created"})
+
+
+def _serialize_request(req):
+    """Helper to serialize a MaterialRequest to dict."""
+    return {
+        "request_id": req.request_id,
+        "requester": req.requester.username,
+        "requester_id": req.requester.id,
+        "item_id": req.item.item_id,
+        "item_name": req.item.name,
+        "quantity_requested": req.quantity_requested,
+        "status": req.status,
+        "notes": req.notes,
+        "created_at": req.created_at.isoformat(),
+        "updated_at": req.updated_at.isoformat(),
+        "reviewed_by": req.reviewed_by.username if req.reviewed_by else None,
+    }
+
+
+@csrf_exempt
+def request_list_create_view(request):
+    """GET: List all requests (with optional ?status= filter). POST: Create new request."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    if request.method == "GET":
+        requests_qs = MaterialRequest.objects.all().order_by("-created_at")
+
+        status_filter = request.GET.get("status")
+        if status_filter and status_filter in ["pending", "approved", "denied", "fulfilled"]:
+            requests_qs = requests_qs.filter(status=status_filter)
+
+        data = [_serialize_request(r) for r in requests_qs]
+        return JsonResponse({"requests": data})
+
+    elif request.method == "POST":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+        item_id = data.get("item_id")
+        quantity_requested = data.get("quantity_requested")
+        notes = data.get("notes", "").strip()
+
+        if not item_id:
+            return JsonResponse({"message": "item_id is required"}, status=400)
+
+        try:
+            item = InventoryItem.objects.get(item_id=item_id)
+        except InventoryItem.DoesNotExist:
+            return JsonResponse({"message": "Item not found"}, status=404)
+
+        try:
+            quantity_requested = int(quantity_requested)
+        except (TypeError, ValueError):
+            return JsonResponse({"message": "quantity_requested must be an integer"}, status=400)
+
+        if quantity_requested <= 0:
+            return JsonResponse({"message": "quantity_requested must be positive"}, status=400)
+
+        new_request = MaterialRequest.objects.create(
+            requester=request.user,
+            item=item,
+            quantity_requested=quantity_requested,
+            notes=notes,
+        )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": "Request created successfully",
+                "request": _serialize_request(new_request),
+            },
+            status=201,
+        )
+
+    return JsonResponse({"message": "Method not allowed"}, status=405)
+
+
+def request_my_view(request):
+    """GET: List only the current user's requests."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    requests_qs = MaterialRequest.objects.filter(requester=request.user).order_by("-created_at")
+    data = [_serialize_request(r) for r in requests_qs]
+    return JsonResponse({"requests": data})
+
+
+@csrf_exempt
+def request_update_view(request, request_id):
+    """PATCH: Update request status (approve/deny/fulfill). Deducts inventory on approval."""
+    if request.method != "PATCH":
+        return JsonResponse({"message": "Only PATCH allowed"}, status=405)
+
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    try:
+        mat_request = MaterialRequest.objects.get(request_id=request_id)
+    except MaterialRequest.DoesNotExist:
+        return JsonResponse({"message": "Request not found"}, status=404)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+    new_status = data.get("status", "").strip().lower()
+
+    if new_status not in ["approved", "denied", "fulfilled"]:
+        return JsonResponse(
+            {"message": "Status must be 'approved', 'denied', or 'fulfilled'"},
+            status=400,
+        )
+
+    # On approval, deduct from inventory if there's enough quantity
+    if new_status == "approved" and mat_request.status == "pending":
+        item = mat_request.item
+        if item.quantity < mat_request.quantity_requested:
+            return JsonResponse(
+                {"message": f"Insufficient inventory. Available: {item.quantity}"},
+                status=400,
+            )
+        item.quantity -= mat_request.quantity_requested
+        item.save()
+
+    mat_request.status = new_status
+    mat_request.reviewed_by = request.user
+    mat_request.save()
+
+    return JsonResponse(
+        {
+            "success": True,
+            "message": f"Request {new_status}",
+            "request": _serialize_request(mat_request),
+        }
+    )

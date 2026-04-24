@@ -4,11 +4,13 @@ import "./App.css";
 import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import InventoryPage from "./pages/InventoryPage";
+import RequestsPage from "./pages/RequestsPage";
 import { apiFetch } from "./api";
 
 function App() {
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [inventoryItems, setInventoryItems] = useState([]);
+  const [materialRequests, setMaterialRequests] = useState([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -20,16 +22,25 @@ function App() {
 
       if (data.authenticated && data.user) {
         setLoggedInUser(data.user);
+        return true;
       } else {
         setLoggedInUser(null);
+        return false;
       }
     } catch {
       setLoggedInUser(null);
+      return false;
     }
   };
 
   useEffect(() => {
-    loadSession().finally(() => setLoading(false));
+    loadSession()
+      .then((isAuthenticated) => {
+        if (isAuthenticated) {
+          return handleLoadInventory();
+        }
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const handleLogout = async () => {
@@ -39,6 +50,7 @@ function App() {
 
     setLoggedInUser(null);
     setInventoryItems([]);
+    setMaterialRequests([]);
     setMessage("");
     setError("");
   };
@@ -135,6 +147,84 @@ function App() {
     }
   };
 
+  const handleLoadRequests = async () => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch("/api/requests/");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not load requests");
+        return;
+      }
+
+      setMaterialRequests(data.requests);
+    } catch {
+      setError("Could not connect to server");
+    }
+  };
+
+  const handleCreateRequest = async (requestData) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch("/api/requests/", {
+        method: "POST",
+        body: JSON.stringify(requestData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not create request");
+        return false;
+      }
+
+      setMaterialRequests((prev) => [data.request, ...prev]);
+      setMessage(data.message);
+      return true;
+    } catch {
+      setError("Could not connect to server");
+      return false;
+    }
+  };
+
+  const handleUpdateRequestStatus = async (requestId, newStatus) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch(`/api/requests/${requestId}/`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not update request");
+        return;
+      }
+
+      setMaterialRequests((prev) =>
+        prev.map((r) =>
+          r.request_id === requestId ? data.request : r
+        )
+      );
+      setMessage(data.message);
+
+      // Refresh inventory if approved (since quantity changed)
+      if (newStatus === "approved") {
+        handleLoadInventory();
+      }
+    } catch {
+      setError("Could not connect to server");
+    }
+  };
+
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
   }
@@ -167,6 +257,7 @@ function App() {
               loggedInUser={loggedInUser}
               onLogout={handleLogout}
               onSeedInventory={handleSeedInventory}
+              inventoryItems={inventoryItems}
               message={message}
               error={error}
             />
@@ -181,10 +272,32 @@ function App() {
         element={
           loggedInUser ? (
             <InventoryPage
+              loggedInUser={loggedInUser}
+              onLogout={handleLogout}
               inventoryItems={inventoryItems}
               onLoadInventory={handleLoadInventory}
               onAddItem={handleAddItem}
               onDeleteItem={handleDeleteItem}
+              onCreateRequest={handleCreateRequest}
+              message={message}
+              error={error}
+            />
+          ) : (
+            <Navigate to="/" />
+          )
+        }
+      />
+
+      <Route
+        path="/requests"
+        element={
+          loggedInUser ? (
+            <RequestsPage
+              loggedInUser={loggedInUser}
+              onLogout={handleLogout}
+              materialRequests={materialRequests}
+              onLoadRequests={handleLoadRequests}
+              onUpdateRequestStatus={handleUpdateRequestStatus}
               message={message}
               error={error}
             />
