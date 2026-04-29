@@ -49,6 +49,45 @@ class InventoryItem(models.Model):
         return self.name
 
 
+class Delivery(models.Model):
+    delivery_id = models.AutoField(primary_key=True)
+    supplier = models.CharField(max_length=255)
+    received_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="deliveries_received"
+    )
+    location = models.CharField(max_length=20, choices=InventoryItem.LOCATION_CHOICES, default="warehouse")
+    notes = models.TextField(blank=True, default="")
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Delivery #{self.delivery_id} from {self.supplier}"
+
+
+class DeliveryItem(models.Model):
+    delivery = models.ForeignKey(
+        Delivery,
+        on_delete=models.CASCADE,
+        related_name="items"
+    )
+    inventory_item = models.ForeignKey(
+        InventoryItem,
+        on_delete=models.CASCADE,
+        related_name="delivery_items",
+        null=True,
+        blank=True
+    )
+    # For new items not yet in inventory
+    item_name = models.CharField(max_length=255)
+    item_type = models.CharField(max_length=20, choices=InventoryItem.ITEM_TYPES, default="material")
+    quantity = models.PositiveIntegerField()
+    description = models.TextField(blank=True, default="")
+
+    def __str__(self):
+        return f"{self.item_name} x{self.quantity}"
+
+
 class MaterialRequest(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),

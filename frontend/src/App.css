@@ -1387,3 +1387,203 @@ button:disabled,
 .requests-table .actions-cell {
   min-width: 140px;
 }
+
+/* ---------- Account button (header) ---------- */
+
+.account-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 2px solid transparent;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+  box-shadow: none;
+}
+
+.account-button:hover {
+  border-color: var(--brand-blue-500);
+  transform: scale(1.05);
+  background: transparent;
+}
+
+.account-button--active {
+  border-color: var(--brand-blue-600);
+}
+
+.account-button .avatar {
+  width: 38px;
+  height: 38px;
+  font-size: 0.9rem;
+}
+
+/* ---------- Account page ---------- */
+
+.account-page-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .account-page-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.account-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2rem 1.5rem;
+  grid-row: span 2;
+}
+
+.account-card__avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--brand-gradient);
+  color: white;
+  font-weight: 700;
+  font-size: 1.5rem;
+  display: grid;
+  place-items: center;
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-md);
+}
+
+.account-card__name {
+  font-size: 1.25rem;
+  margin: 0 0 0.25rem 0;
+}
+
+.account-card__email {
+  color: var(--ink-500);
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem 0;
+}
+
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.info-list__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--ink-100);
+}
+
+.info-list__item:last-child {
+  border-bottom: none;
+}
+
+.info-list__label {
+  font-size: 0.85rem;
+  color: var(--ink-500);
+  font-weight: 500;
+}
+
+.info-list__value {
+  font-size: 0.9rem;
+  color: var(--ink-900);
+  font-weight: 600;
+}
+
+/* ---------- Location tabs ---------- */
+
+.location-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--ink-200);
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+.location-tab {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-500);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.location-tab:hover {
+  background: var(--ink-50);
+  color: var(--ink-700);
+}
+
+.location-tab--active {
+  background: var(--brand-blue-50);
+  color: var(--brand-blue-700);
+  border-color: var(--brand-blue-200);
+}
+
+.location-tab--active:hover {
+  background: var(--brand-blue-100);
+}
+
+/* ---------- Delivery form ---------- */
+
+.delivery-items-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--ink-200);
+}
+
+.delivery-items-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.delivery-items-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--ink-900);
+}
+
+.delivery-item-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 120px 100px auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 1rem;
+  background: var(--ink-50);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.75rem;
+}
+
+.delivery-item-row .field {
+  margin: 0;
+}
+
+.remove-item-btn {
+  margin-bottom: 0.35rem;
+}
+
+.delivery-items-preview {
+  font-size: 0.88rem;
+  color: var(--ink-700);
+}
+
+@media (max-width: 900px) {
+  .delivery-item-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}

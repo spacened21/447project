@@ -8,7 +8,7 @@ function initials(name) {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-function Header({ loggedInUser, onLogout, showBackButton = false }) {
+function Header({ loggedInUser }) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -44,11 +44,19 @@ function Header({ loggedInUser, onLogout, showBackButton = false }) {
           </button>
           <button
             className={`app-nav__link ${
+              location.pathname === "/deliveries" ? "app-nav__link--active" : ""
+            }`}
+            onClick={() => navigate("/deliveries")}
+          >
+            Deliveries
+          </button>
+          <button
+            className={`app-nav__link ${
               location.pathname === "/requests" ? "app-nav__link--active" : ""
             }`}
             onClick={() => navigate("/requests")}
           >
-            Requests
+            Activity Log
           </button>
         </nav>
 

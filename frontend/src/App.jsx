@@ -5,12 +5,15 @@ import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import InventoryPage from "./pages/InventoryPage";
 import RequestsPage from "./pages/RequestsPage";
+import DeliveriesPage from "./pages/DeliveriesPage";
+import AccountPage from "./pages/AccountPage";
 import { apiFetch } from "./api";
 
 function App() {
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [materialRequests, setMaterialRequests] = useState([]);
+  const [deliveries, setDeliveries] = useState([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -51,6 +54,7 @@ function App() {
     setLoggedInUser(null);
     setInventoryItems([]);
     setMaterialRequests([]);
+    setDeliveries([]);
     setMessage("");
     setError("");
   };
@@ -225,6 +229,55 @@ function App() {
     }
   };
 
+  const handleLoadDeliveries = async () => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch("/api/deliveries/");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not load deliveries");
+        return;
+      }
+
+      setDeliveries(data.deliveries);
+    } catch {
+      setError("Could not connect to server");
+    }
+  };
+
+  const handleCreateDelivery = async (deliveryData) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch("/api/deliveries/", {
+        method: "POST",
+        body: JSON.stringify(deliveryData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not log delivery");
+        return false;
+      }
+
+      setDeliveries((prev) => [data.delivery, ...prev]);
+      setMessage(data.message);
+
+      // Refresh inventory since delivery may have added/updated items
+      handleLoadInventory();
+
+      return true;
+    } catch {
+      setError("Could not connect to server");
+      return false;
+    }
+  };
+
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
   }
@@ -297,9 +350,42 @@ function App() {
               onLogout={handleLogout}
               materialRequests={materialRequests}
               onLoadRequests={handleLoadRequests}
-              onUpdateRequestStatus={handleUpdateRequestStatus}
               message={message}
               error={error}
+            />
+          ) : (
+            <Navigate to="/" />
+          )
+        }
+      />
+
+      <Route
+        path="/deliveries"
+        element={
+          loggedInUser ? (
+            <DeliveriesPage
+              loggedInUser={loggedInUser}
+              deliveries={deliveries}
+              inventoryItems={inventoryItems}
+              onLoadDeliveries={handleLoadDeliveries}
+              onCreateDelivery={handleCreateDelivery}
+              onLoadInventory={handleLoadInventory}
+              message={message}
+              error={error}
+            />
+          ) : (
+            <Navigate to="/" />
+          )
+        }
+      />
+
+      <Route
+        path="/account"
+        element={
+          loggedInUser ? (
+            <AccountPage
+              loggedInUser={loggedInUser}
+              onLogout={handleLogout}
             />
           ) : (
             <Navigate to="/" />

@@ -118,11 +118,7 @@ function InventoryPage({
 
   return (
     <div className="app-shell">
-      <Header
-        loggedInUser={loggedInUser}
-        onLogout={onLogout}
-        showBackButton={true}
-      />
+      <Header loggedInUser={loggedInUser} />
 
       <main className="app-main">
         <div className="app-container">

@@ -6,47 +6,29 @@ function RequestsPage({
   onLogout,
   materialRequests,
   onLoadRequests,
-  onUpdateRequestStatus,
   message,
   error,
 }) {
-  const [statusFilter, setStatusFilter] = useState("");
-  const [myRequestsOnly, setMyRequestsOnly] = useState(false);
+  const [myActivityOnly, setMyActivityOnly] = useState(false);
 
   useEffect(() => {
     onLoadRequests();
   }, []);
 
-  const filterRequests = (requests) => {
+  const filterActivity = (requests) => {
     let filtered = requests;
 
-    if (statusFilter) {
-      filtered = filtered.filter((r) => r.status === statusFilter);
-    }
-
-    if (myRequestsOnly) {
+    if (myActivityOnly) {
       filtered = filtered.filter((r) => r.requester === loggedInUser.username);
     }
 
-    return filtered;
+    // Sort by most recent first
+    return filtered.sort(
+      (a, b) => new Date(b.created_at) - new Date(a.created_at)
+    );
   };
 
-  const filteredRequests = filterRequests(materialRequests);
-
-  const getStatusBadgeClass = (status) => {
-    switch (status) {
-      case "pending":
-        return "badge--pending";
-      case "approved":
-        return "badge--approved";
-      case "denied":
-        return "badge--denied";
-      case "fulfilled":
-        return "badge--fulfilled";
-      default:
-        return "badge--neutral";
-    }
-  };
+  const filteredActivity = filterActivity(materialRequests);
 
   const formatDate = (isoString) => {
     return new Date(isoString).toLocaleDateString("en-US", {
@@ -60,20 +42,16 @@ function RequestsPage({
 
   return (
     <div className="app-shell">
-      <Header
-        loggedInUser={loggedInUser}
-        onLogout={onLogout}
-        showBackButton={true}
-      />
+      <Header loggedInUser={loggedInUser} />
 
       <main className="app-main">
         <div className="app-container">
           <div className="page-header">
             <div>
-              <span className="page-header__eyebrow">Operations</span>
-              <h1 className="page-header__title">Material Requests</h1>
+              <span className="page-header__eyebrow">Records</span>
+              <h1 className="page-header__title">Activity Log</h1>
               <p className="page-header__subtitle">
-                Review and manage material requests from your team.
+                Track what materials have been taken and by whom.
               </p>
             </div>
 
@@ -100,128 +78,60 @@ function RequestsPage({
           <section className="table-card">
             <div className="table-card__header">
               <div>
-                <h2>All Requests</h2>
+                <h2>Recent Activity</h2>
                 <p>
-                  {filteredRequests.length} of {materialRequests.length}{" "}
-                  {materialRequests.length === 1 ? "request" : "requests"}
+                  {filteredActivity.length}{" "}
+                  {filteredActivity.length === 1 ? "entry" : "entries"}
                 </p>
               </div>
 
               <div className="filter-controls">
-                <select
-                  className="status-filter"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                >
-                  <option value="">All Statuses</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="denied">Denied</option>
-                  <option value="fulfilled">Fulfilled</option>
-                </select>
-
                 <label className="toggle-label">
                   <input
                     type="checkbox"
-                    checked={myRequestsOnly}
-                    onChange={(e) => setMyRequestsOnly(e.target.checked)}
+                    checked={myActivityOnly}
+                    onChange={(e) => setMyActivityOnly(e.target.checked)}
                   />
-                  My requests only
+                  My activity only
                 </label>
               </div>
             </div>
 
             <div className="table-wrapper">
-              {filteredRequests.length === 0 ? (
+              {filteredActivity.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-state__title">No requests found</div>
+                  <div className="empty-state__title">No activity yet</div>
                   <div className="empty-state__hint">
-                    {statusFilter || myRequestsOnly
-                      ? "Try adjusting your filters."
-                      : "No material requests have been made yet."}
+                    {myActivityOnly
+                      ? "You haven't taken any materials yet."
+                      : "No materials have been taken yet."}
                   </div>
                 </div>
               ) : (
-                <table className="inventory-table requests-table">
+                <table className="inventory-table activity-table">
                   <thead>
                     <tr>
-                      <th>ID</th>
+                      <th>Date</th>
                       <th>Item</th>
                       <th>Quantity</th>
-                      <th>Requester</th>
-                      <th>Status</th>
-                      <th>Created</th>
-                      <th>Reviewed by</th>
+                      <th>Taken By</th>
                       <th>Notes</th>
-                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRequests.map((req) => (
-                      <tr key={req.request_id}>
-                        <td className="mono">#{req.request_id}</td>
+                    {filteredActivity.map((entry) => (
+                      <tr key={entry.request_id}>
+                        <td className="mono">{formatDate(entry.created_at)}</td>
                         <td>
-                          <strong>{req.item_name}</strong>
+                          <strong>{entry.item_name}</strong>
                         </td>
-                        <td className="mono">{req.quantity_requested}</td>
+                        <td className="mono">{entry.quantity_requested}</td>
                         <td>
                           <span className="badge badge--neutral">
-                            {req.requester}
+                            {entry.requester}
                           </span>
                         </td>
-                        <td>
-                          <span
-                            className={`badge ${getStatusBadgeClass(
-                              req.status
-                            )}`}
-                          >
-                            {req.status}
-                          </span>
-                        </td>
-                        <td className="mono">{formatDate(req.created_at)}</td>
-                        <td>{req.reviewed_by || "—"}</td>
-                        <td className="notes-cell">{req.notes || "—"}</td>
-                        <td className="actions-cell">
-                          {req.status === "pending" && (
-                            <>
-                              <button
-                                className="btn btn--approve small-button"
-                                onClick={() =>
-                                  onUpdateRequestStatus(
-                                    req.request_id,
-                                    "approved"
-                                  )
-                                }
-                              >
-                                Approve
-                              </button>
-                              <button
-                                className="btn btn--deny small-button"
-                                onClick={() =>
-                                  onUpdateRequestStatus(
-                                    req.request_id,
-                                    "denied"
-                                  )
-                                }
-                              >
-                                Deny
-                              </button>
-                            </>
-                          )}
-                          {req.status === "approved" && (
-                            <button
-                              className="btn btn--fulfill small-button"
-                              onClick={() =>
-                                onUpdateRequestStatus(
-                                  req.request_id,
-                                  "fulfilled"
-                                )
-                              }
-                            >
-                              Mark Fulfilled
-                            </button>
-                          )}
-                        </td>
+                        <td className="notes-cell">{entry.notes || "—"}</td>
                       </tr>
                     ))}
                   </tbody>

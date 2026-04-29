@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout, get_user_model
-from .models import InventoryItem, MaterialRequest
+from .models import InventoryItem, MaterialRequest, Delivery, DeliveryItem
 
 User = get_user_model()
 
@@ -467,3 +467,149 @@ def request_update_view(request, request_id):
             "request": _serialize_request(mat_request),
         }
     )
+
+
+def _serialize_delivery(delivery):
+    """Helper to serialize a Delivery to dict."""
+    items = []
+    for di in delivery.items.all():
+        items.append({
+            "item_name": di.item_name,
+            "item_type": di.item_type,
+            "quantity": di.quantity,
+            "description": di.description,
+            "inventory_item_id": di.inventory_item.item_id if di.inventory_item else None,
+        })
+
+    return {
+        "delivery_id": delivery.delivery_id,
+        "supplier": delivery.supplier,
+        "received_by": delivery.received_by.username,
+        "location": delivery.location,
+        "notes": delivery.notes,
+        "received_at": delivery.received_at.isoformat(),
+        "items": items,
+        "item_count": len(items),
+        "total_quantity": sum(i["quantity"] for i in items),
+    }
+
+
+@csrf_exempt
+def delivery_list_create_view(request):
+    """GET: List all deliveries. POST: Create new delivery with items."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    if request.method == "GET":
+        deliveries = Delivery.objects.all().order_by("-received_at")
+        data = [_serialize_delivery(d) for d in deliveries]
+        return JsonResponse({"deliveries": data})
+
+    elif request.method == "POST":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+        supplier = data.get("supplier", "").strip()
+        location = data.get("location", "warehouse").strip().lower()
+        notes = data.get("notes", "").strip()
+        items = data.get("items", [])
+
+        if not supplier:
+            return JsonResponse({"message": "Supplier is required"}, status=400)
+
+        if location not in ["warehouse", "yard", "jobsite"]:
+            return JsonResponse(
+                {"message": "Location must be 'warehouse', 'yard', or 'jobsite'"},
+                status=400,
+            )
+
+        if not items or len(items) == 0:
+            return JsonResponse({"message": "At least one item is required"}, status=400)
+
+        # Create the delivery
+        delivery = Delivery.objects.create(
+            supplier=supplier,
+            received_by=request.user,
+            location=location,
+            notes=notes,
+        )
+
+        # Process each item
+        for item_data in items:
+            item_name = item_data.get("item_name", "").strip()
+            item_type = item_data.get("item_type", "material").strip().lower()
+            quantity = item_data.get("quantity", 0)
+            description = item_data.get("description", "").strip()
+            add_to_inventory = item_data.get("add_to_inventory", True)
+            existing_item_id = item_data.get("existing_item_id")
+
+            if not item_name:
+                continue
+
+            try:
+                quantity = int(quantity)
+            except (TypeError, ValueError):
+                quantity = 0
+
+            if quantity <= 0:
+                continue
+
+            inventory_item = None
+
+            # If linking to existing inventory item, update its quantity
+            if existing_item_id:
+                try:
+                    inventory_item = InventoryItem.objects.get(item_id=existing_item_id)
+                    inventory_item.quantity += quantity
+                    inventory_item.save()
+                except InventoryItem.DoesNotExist:
+                    pass
+
+            # If adding as new inventory item
+            elif add_to_inventory:
+                inventory_item = InventoryItem.objects.create(
+                    name=item_name,
+                    description=description or f"Received in delivery #{delivery.delivery_id}",
+                    type=item_type if item_type in ["material", "equipment"] else "material",
+                    location=location,
+                    quantity=quantity,
+                    price=Decimal("0.00"),
+                    supplier=supplier,
+                    created_by=request.user,
+                )
+
+            # Create the delivery item record
+            DeliveryItem.objects.create(
+                delivery=delivery,
+                inventory_item=inventory_item,
+                item_name=item_name,
+                item_type=item_type if item_type in ["material", "equipment"] else "material",
+                quantity=quantity,
+                description=description,
+            )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": "Delivery logged successfully",
+                "delivery": _serialize_delivery(delivery),
+            },
+            status=201,
+        )
+
+    return JsonResponse({"message": "Method not allowed"}, status=405)
+
+
+def delivery_detail_view(request, delivery_id):
+    """GET: Get a single delivery by ID."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    try:
+        delivery = Delivery.objects.get(delivery_id=delivery_id)
+    except Delivery.DoesNotExist:
+        return JsonResponse({"message": "Delivery not found"}, status=404)
+
+    return JsonResponse({"delivery": _serialize_delivery(delivery)})

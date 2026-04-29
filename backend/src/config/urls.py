@@ -12,6 +12,8 @@ from api.views import (
     request_list_create_view,
     request_my_view,
     request_update_view,
+    delivery_list_create_view,
+    delivery_detail_view,
 )
 
 urlpatterns = [
@@ -27,4 +29,6 @@ urlpatterns = [
     path("api/requests/", request_list_create_view),
     path("api/requests/mine/", request_my_view),
     path("api/requests/<int:request_id>/", request_update_view),
+    path("api/deliveries/", delivery_list_create_view),
+    path("api/deliveries/<int:delivery_id>/", delivery_detail_view),
 ]

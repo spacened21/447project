@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
 
@@ -10,18 +11,30 @@ function DashboardPage({
   error,
 }) {
   const navigate = useNavigate();
+  const [activeLocation, setActiveLocation] = useState("all");
 
   // Calculate inventory metrics
   const totalItems = inventoryItems.length;
   const totalStock = inventoryItems.reduce((sum, item) => sum + item.quantity, 0);
-  const lowStockItems = inventoryItems
-    .filter((item) => item.quantity <= 10)
-    .sort((a, b) => a.quantity - b.quantity);
-  const lowStockCount = lowStockItems.length;
+
+  // Missing items = quantity is 0
+  const missingItems = inventoryItems.filter((item) => item.quantity === 0);
+  const missingCount = missingItems.length;
+
+  // Group missing items by location
+  const locations = ["warehouse", "yard", "jobsite"];
+  const missingByLocation = {
+    all: missingItems,
+    warehouse: missingItems.filter((item) => item.location === "warehouse"),
+    yard: missingItems.filter((item) => item.location === "yard"),
+    jobsite: missingItems.filter((item) => item.location === "jobsite"),
+  };
+
+  const displayedMissingItems = missingByLocation[activeLocation] || [];
 
   return (
     <div className="app-shell">
-      <Header loggedInUser={loggedInUser} onLogout={onLogout} />
+      <Header loggedInUser={loggedInUser} />
 
       <main className="app-main">
         <div className="app-container">
@@ -79,40 +92,68 @@ function DashboardPage({
               <div className="metric-card">
                 <span className="metric-card__icon metric-card__icon--orange">⚠</span>
                 <div className="metric-card__content">
-                  <span className="metric-card__value">{lowStockCount}</span>
-                  <span className="metric-card__label">Low Stock Alerts</span>
+                  <span className="metric-card__value">{missingCount}</span>
+                  <span className="metric-card__label">Missing Items</span>
                 </div>
               </div>
             </div>
           </section>
 
-          {/* Low Stock Alerts Section */}
-          {lowStockItems.length > 0 && (
-            <section className="table-card">
-              <div className="table-card__header">
-                <div>
-                  <h2>Low Stock Items</h2>
-                </div>
-                <button
-                  className="btn btn--outline small-button"
-                  onClick={() => navigate("/inventory")}
-                >
-                  View all inventory →
-                </button>
+          {/* Missing Items Section */}
+          <section className="table-card">
+            <div className="table-card__header">
+              <div>
+                <h2>Missing Items</h2>
+                <p>Items that are out of stock at each location</p>
               </div>
+              <button
+                className="btn btn--outline small-button"
+                onClick={() => navigate("/inventory")}
+              >
+                View all inventory →
+              </button>
+            </div>
 
-              <div className="table-wrapper">
+            <div className="location-tabs">
+              <button
+                className={`location-tab ${activeLocation === "all" ? "location-tab--active" : ""}`}
+                onClick={() => setActiveLocation("all")}
+              >
+                All ({missingByLocation.all.length})
+              </button>
+              {locations.map((loc) => (
+                <button
+                  key={loc}
+                  className={`location-tab ${activeLocation === loc ? "location-tab--active" : ""}`}
+                  onClick={() => setActiveLocation(loc)}
+                >
+                  {loc.charAt(0).toUpperCase() + loc.slice(1)} ({missingByLocation[loc].length})
+                </button>
+              ))}
+            </div>
+
+            <div className="table-wrapper">
+              {displayedMissingItems.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-state__title">No missing items</div>
+                  <div className="empty-state__hint">
+                    {activeLocation === "all"
+                      ? "All items are in stock across all locations."
+                      : `All items are in stock at the ${activeLocation}.`}
+                  </div>
+                </div>
+              ) : (
                 <table className="inventory-table low-stock-table">
                   <thead>
                     <tr>
                       <th>Name</th>
                       <th>Type</th>
-                      <th>Quantity</th>
+                      <th>Location</th>
                       <th>Supplier</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {lowStockItems.map((item) => (
+                    {displayedMissingItems.map((item) => (
                       <tr key={item.item_id}>
                         <td>
                           <strong>{item.name}</strong>
@@ -128,9 +169,9 @@ function DashboardPage({
                             {item.type}
                           </span>
                         </td>
-                        <td className="mono">
-                          <span className={item.quantity <= 5 ? "low-stock-critical" : "low-stock-warning"}>
-                            {item.quantity}
+                        <td>
+                          <span className="badge badge--location">
+                            {item.location}
                           </span>
                         </td>
                         <td>{item.supplier}</td>
@@ -138,9 +179,9 @@ function DashboardPage({
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </section>
-          )}
+              )}
+            </div>
+          </section>
 
           <section>
             <div className="page-header">
