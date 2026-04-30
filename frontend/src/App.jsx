@@ -7,6 +7,7 @@ import InventoryPage from "./pages/InventoryPage";
 import RequestsPage from "./pages/RequestsPage";
 import DeliveriesPage from "./pages/DeliveriesPage";
 import AccountPage from "./pages/AccountPage";
+import AdminPage from "./pages/AdminPage";
 import { apiFetch } from "./api";
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
   const [inventoryItems, setInventoryItems] = useState([]);
   const [materialRequests, setMaterialRequests] = useState([]);
   const [deliveries, setDeliveries] = useState([]);
+  const [users, setUsers] = useState([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -55,6 +57,7 @@ function App() {
     setInventoryItems([]);
     setMaterialRequests([]);
     setDeliveries([]);
+    setUsers([]);
     setMessage("");
     setError("");
   };
@@ -129,25 +132,50 @@ function App() {
     }
   };
 
-  const handleSeedInventory = async () => {
+  const handleLoadUsers = async () => {
     setError("");
     setMessage("");
 
     try {
-      const res = await apiFetch("/api/inventory/seed/", {
-        method: "POST",
+      const res = await apiFetch("/api/admin/users/");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not load users");
+        return;
+      }
+
+      setUsers(data.users);
+    } catch {
+      setError("Could not connect to server");
+    }
+  };
+
+  const handleUpdateUser = async (userId, updates) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch(`/api/admin/users/${userId}/`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.message || "Could not create test inventory");
-        return;
+        setError(data.message || "Could not update user");
+        return false;
       }
 
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? data.user : u))
+      );
       setMessage(data.message);
+      return true;
     } catch {
       setError("Could not connect to server");
+      return false;
     }
   };
 
@@ -309,7 +337,6 @@ function App() {
             <DashboardPage
               loggedInUser={loggedInUser}
               onLogout={handleLogout}
-              onSeedInventory={handleSeedInventory}
               inventoryItems={inventoryItems}
               message={message}
               error={error}
@@ -387,6 +414,28 @@ function App() {
               loggedInUser={loggedInUser}
               onLogout={handleLogout}
             />
+          ) : (
+            <Navigate to="/" />
+          )
+        }
+      />
+
+      <Route
+        path="/admin"
+        element={
+          loggedInUser ? (
+            loggedInUser.role === "admin" ? (
+              <AdminPage
+                loggedInUser={loggedInUser}
+                users={users}
+                onLoadUsers={handleLoadUsers}
+                onUpdateUser={handleUpdateUser}
+                message={message}
+                error={error}
+              />
+            ) : (
+              <Navigate to="/dashboard" />
+            )
           ) : (
             <Navigate to="/" />
           )

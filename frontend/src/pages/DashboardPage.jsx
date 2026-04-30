@@ -5,7 +5,6 @@ import Header from "../components/Header";
 function DashboardPage({
   loggedInUser,
   onLogout,
-  onSeedInventory,
   inventoryItems = [],
   message,
   error,
@@ -225,8 +224,7 @@ function DashboardPage({
                 <span className="page-header__eyebrow">Quick actions</span>
                 <h2 className="page-header__title">Jump back in</h2>
                 <p className="page-header__subtitle">
-                  Pick up where you left off or seed a fresh sandbox for
-                  testing.
+                  Pick up where you left off.
                 </p>
               </div>
             </div>
@@ -246,19 +244,21 @@ function DashboardPage({
                 </p>
               </button>
 
-              <button
-                type="button"
-                className="action-card action-card--clickable"
-                onClick={onSeedInventory}
-              >
-                <span className="action-card__icon action-card__icon--red">
-                  ✦
-                </span>
-                <h3 className="action-card__title">Create test data</h3>
-                <p className="action-card__desc">
-                  Populate your workspace with sample records to explore.
-                </p>
-              </button>
+              {loggedInUser.role === "admin" && (
+                <button
+                  type="button"
+                  className="action-card action-card--clickable"
+                  onClick={() => navigate("/admin")}
+                >
+                  <span className="action-card__icon action-card__icon--red">
+                    ⚿
+                  </span>
+                  <h3 className="action-card__title">Admin permissions</h3>
+                  <p className="action-card__desc">
+                    Manage user accounts, roles, and access.
+                  </p>
+                </button>
+              )}
 
               <button
                 type="button"

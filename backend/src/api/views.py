@@ -262,74 +262,6 @@ def inventory_delete_view(request, item_id):
     return JsonResponse({"success": True, "message": "Item deleted"})
 
 
-@csrf_exempt
-def seed_inventory_view(request):
-    if request.method != "POST":
-        return JsonResponse({"message": "Only POST allowed"}, status=405)
-
-    if not request.user.is_authenticated:
-        return JsonResponse({"message": "Login required"}, status=401)
-
-    if InventoryItem.objects.exists():
-        return JsonResponse(
-            {"message": "Inventory already has data"},
-            status=400,
-        )
-
-    test_items = [
-        {
-            "name": "Copper Pipe",
-            "description": "3/4 inch copper plumbing pipe",
-            "type": "material",
-            "location": "warehouse",
-            "quantity": 120,
-            "price": Decimal("14.99"),
-            "supplier": "Home Supply Co",
-        },
-        {
-            "name": "Air Filter",
-            "description": "Standard HVAC replacement filter",
-            "type": "material",
-            "location": "yard",
-            "quantity": 75,
-            "price": Decimal("9.50"),
-            "supplier": "Filter World",
-        },
-        {
-            "name": "Power Drill",
-            "description": "Cordless drill for installations",
-            "type": "equipment",
-            "location": "jobsite",
-            "quantity": 8,
-            "price": Decimal("129.99"),
-            "supplier": "Tool Depot",
-        },
-        {
-            "name": "Thermostat",
-            "description": "Programmable smart thermostat",
-            "type": "equipment",
-            "location": "warehouse",
-            "quantity": 15,
-            "price": Decimal("89.99"),
-            "supplier": "Climate Parts Inc",
-        },
-    ]
-
-    for item_data in test_items:
-        InventoryItem.objects.create(
-            name=item_data["name"],
-            description=item_data["description"],
-            type=item_data["type"],
-            location=item_data["location"],
-            quantity=item_data["quantity"],
-            price=item_data["price"],
-            supplier=item_data["supplier"],
-            created_by=request.user,
-        )
-
-    return JsonResponse({"success": True, "message": "Test inventory created"})
-
-
 def _serialize_request(req):
     """Helper to serialize a MaterialRequest to dict."""
     return {
@@ -613,3 +545,74 @@ def delivery_detail_view(request, delivery_id):
         return JsonResponse({"message": "Delivery not found"}, status=404)
 
     return JsonResponse({"delivery": _serialize_delivery(delivery)})
+
+
+def _serialize_user(u):
+    return {
+        "id": u.id,
+        "username": u.username,
+        "email": u.email,
+        "role": u.role,
+        "is_active": u.is_active,
+        "date_joined": u.date_joined.isoformat() if u.date_joined else None,
+    }
+
+
+def admin_users_list_view(request):
+    """GET: List all users (admin only)."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    if request.user.role != "admin":
+        return JsonResponse({"message": "Admin access required"}, status=403)
+
+    users = User.objects.all().order_by("id")
+    return JsonResponse({"users": [_serialize_user(u) for u in users]})
+
+
+@csrf_exempt
+def admin_user_update_view(request, user_id):
+    """PATCH: Update a user's role or active status (admin only)."""
+    if request.method != "PATCH":
+        return JsonResponse({"message": "Only PATCH allowed"}, status=405)
+
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    if request.user.role != "admin":
+        return JsonResponse({"message": "Admin access required"}, status=403)
+
+    try:
+        target = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"message": "User not found"}, status=404)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+    if target.id == request.user.id:
+        return JsonResponse(
+            {"message": "You cannot modify your own account here"},
+            status=400,
+        )
+
+    if "role" in data:
+        new_role = str(data.get("role", "")).strip().lower()
+        if new_role not in ["user", "admin"]:
+            return JsonResponse({"message": "Role must be 'user' or 'admin'"}, status=400)
+        target.role = new_role
+
+    if "is_active" in data:
+        target.is_active = bool(data.get("is_active"))
+
+    target.save()
+
+    return JsonResponse(
+        {
+            "success": True,
+            "message": "User updated",
+            "user": _serialize_user(target),
+        }
+    )
