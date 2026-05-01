@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
 
@@ -7,6 +7,7 @@ const EMPTY_FORM = {
   description: "",
   type: "material",
   location: "warehouse",
+  jobsite_id: "",
   quantity: "",
   price: "",
   supplier: "",
@@ -16,9 +17,12 @@ function InventoryPage({
   loggedInUser,
   onLogout,
   inventoryItems,
+  jobsites = [],
   onLoadInventory,
+  onLoadJobsites,
   onAddItem,
   onDeleteItem,
+  onReassignItem,
   onCreateRequest,
   message,
   error,
@@ -30,12 +34,25 @@ function InventoryPage({
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
+  const [jobsiteFilter, setJobsiteFilter] = useState("");
 
   // Request modal state
   const [requestModalItem, setRequestModalItem] = useState(null);
   const [requestQuantity, setRequestQuantity] = useState("");
   const [requestNotes, setRequestNotes] = useState("");
   const [requestSubmitting, setRequestSubmitting] = useState(false);
+
+  // Reassign modal state
+  const [reassignItem, setReassignItem] = useState(null);
+  const [reassignLocation, setReassignLocation] = useState("warehouse");
+  const [reassignJobsiteId, setReassignJobsiteId] = useState("");
+  const [reassignSubmitting, setReassignSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (onLoadJobsites) {
+      onLoadJobsites();
+    }
+  }, []);
 
   const handleFieldChange = (e) => {
     const { name, value } = e.target;
@@ -46,7 +63,7 @@ function InventoryPage({
     e.preventDefault();
     setSubmitting(true);
 
-    const success = await onAddItem({
+    const payload = {
       name: formValues.name,
       description: formValues.description,
       type: formValues.type,
@@ -54,7 +71,13 @@ function InventoryPage({
       quantity: Number(formValues.quantity),
       price: formValues.price,
       supplier: formValues.supplier,
-    });
+    };
+
+    if (formValues.location === "jobsite" && formValues.jobsite_id) {
+      payload.jobsite_id = parseInt(formValues.jobsite_id, 10);
+    }
+
+    const success = await onAddItem(payload);
 
     setSubmitting(false);
 
@@ -64,12 +87,18 @@ function InventoryPage({
     }
   };
 
-  const filterItems = (items, query, location) => {
+  const filterItems = (items, query, location, jobsiteId) => {
     let filtered = items;
 
     // Filter by location
     if (location) {
       filtered = filtered.filter((item) => item.location === location);
+    }
+
+    // Filter by jobsite
+    if (jobsiteId) {
+      const jsId = parseInt(jobsiteId, 10);
+      filtered = filtered.filter((item) => item.jobsite_id === jsId);
     }
 
     // Filter by search query
@@ -78,14 +107,20 @@ function InventoryPage({
       filtered = filtered.filter((item) =>
         item.name?.toLowerCase().includes(lowerQuery) ||
         item.description?.toLowerCase().includes(lowerQuery) ||
-        item.supplier?.toLowerCase().includes(lowerQuery)
+        item.supplier?.toLowerCase().includes(lowerQuery) ||
+        item.jobsite_name?.toLowerCase().includes(lowerQuery)
       );
     }
 
     return filtered;
   };
 
-  const filteredItems = filterItems(inventoryItems, searchQuery, locationFilter);
+  const filteredItems = filterItems(
+    inventoryItems,
+    searchQuery,
+    locationFilter,
+    jobsiteFilter
+  );
 
   const handleOpenRequestModal = (item) => {
     setRequestModalItem(item);
@@ -115,6 +150,40 @@ function InventoryPage({
       handleCloseRequestModal();
     }
   };
+
+  const handleOpenReassignModal = (item) => {
+    setReassignItem(item);
+    setReassignLocation(item.location);
+    setReassignJobsiteId(item.jobsite_id ? String(item.jobsite_id) : "");
+  };
+
+  const handleCloseReassignModal = () => {
+    setReassignItem(null);
+    setReassignJobsiteId("");
+  };
+
+  const handleSubmitReassign = async (e) => {
+    e.preventDefault();
+    setReassignSubmitting(true);
+
+    const payload = { location: reassignLocation };
+    if (reassignLocation === "jobsite") {
+      payload.jobsite_id = reassignJobsiteId
+        ? parseInt(reassignJobsiteId, 10)
+        : null;
+    }
+
+    const success = await onReassignItem(reassignItem.item_id, payload);
+    setReassignSubmitting(false);
+
+    if (success) {
+      handleCloseReassignModal();
+    }
+  };
+
+  const sortedJobsites = [...jobsites].sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
 
   return (
     <div className="app-shell">
@@ -244,6 +313,32 @@ function InventoryPage({
                     </select>
                   </div>
 
+                  {formValues.location === "jobsite" && (
+                    <div className="field">
+                      <label htmlFor="jobsite_id">Jobsite</label>
+                      <select
+                        id="jobsite_id"
+                        name="jobsite_id"
+                        value={formValues.jobsite_id}
+                        onChange={handleFieldChange}
+                        required
+                      >
+                        <option value="">-- Select a jobsite --</option>
+                        {sortedJobsites.map((js) => (
+                          <option key={js.jobsite_id} value={js.jobsite_id}>
+                            {js.name}
+                          </option>
+                        ))}
+                      </select>
+                      {sortedJobsites.length === 0 && (
+                        <p className="panel__hint">
+                          No jobsites yet — create one on the Jobsites tab
+                          first.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="field">
                     <label htmlFor="quantity">Quantity</label>
                     <input
@@ -323,13 +418,33 @@ function InventoryPage({
                 <select
                   className="location-filter"
                   value={locationFilter}
-                  onChange={(e) => setLocationFilter(e.target.value)}
+                  onChange={(e) => {
+                    setLocationFilter(e.target.value);
+                    if (e.target.value !== "jobsite") {
+                      setJobsiteFilter("");
+                    }
+                  }}
                 >
                   <option value="">All Locations</option>
                   <option value="warehouse">Warehouse</option>
                   <option value="yard">Yard</option>
                   <option value="jobsite">Jobsite</option>
                 </select>
+
+                {sortedJobsites.length > 0 && (
+                  <select
+                    className="location-filter"
+                    value={jobsiteFilter}
+                    onChange={(e) => setJobsiteFilter(e.target.value)}
+                  >
+                    <option value="">All jobsites</option>
+                    {sortedJobsites.map((js) => (
+                      <option key={js.jobsite_id} value={js.jobsite_id}>
+                        {js.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
                 <div className="search-wrapper">
                   <input
@@ -402,7 +517,9 @@ function InventoryPage({
                         </td>
                         <td>
                           <span className="badge badge--location">
-                            {item.location}
+                            {item.location === "jobsite" && item.jobsite_name
+                              ? `Jobsite: ${item.jobsite_name}`
+                              : item.location}
                           </span>
                         </td>
                         <td className="mono">{item.quantity}</td>
@@ -419,6 +536,12 @@ function InventoryPage({
                             onClick={() => handleOpenRequestModal(item)}
                           >
                             Request
+                          </button>
+                          <button
+                            className="btn btn--outline small-button"
+                            onClick={() => handleOpenReassignModal(item)}
+                          >
+                            Reassign
                           </button>
                           {deleteMode && (
                             <button
@@ -438,6 +561,97 @@ function InventoryPage({
           </section>
         </div>
       </main>
+
+      {/* Reassign Modal */}
+      {reassignItem && (
+        <div className="modal-overlay" onClick={handleCloseReassignModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <h2 className="modal__title">Reassign item</h2>
+              <button
+                className="modal__close"
+                onClick={handleCloseReassignModal}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal__body">
+              <p className="modal__item-info">
+                <strong>{reassignItem.name}</strong>
+                <br />
+                <span className="modal__item-stock">
+                  Currently at:{" "}
+                  {reassignItem.location === "jobsite" &&
+                  reassignItem.jobsite_name
+                    ? `${reassignItem.jobsite_name} (jobsite)`
+                    : reassignItem.location}
+                </span>
+              </p>
+
+              <form onSubmit={handleSubmitReassign}>
+                <div className="field">
+                  <label htmlFor="reassign-location">New location</label>
+                  <select
+                    id="reassign-location"
+                    value={reassignLocation}
+                    onChange={(e) => setReassignLocation(e.target.value)}
+                  >
+                    <option value="warehouse">Warehouse</option>
+                    <option value="yard">Yard</option>
+                    <option value="jobsite">Jobsite</option>
+                  </select>
+                </div>
+
+                {reassignLocation === "jobsite" && (
+                  <div className="field">
+                    <label htmlFor="reassign-jobsite">Jobsite</label>
+                    <select
+                      id="reassign-jobsite"
+                      value={reassignJobsiteId}
+                      onChange={(e) => setReassignJobsiteId(e.target.value)}
+                      required
+                    >
+                      <option value="">-- Select a jobsite --</option>
+                      {sortedJobsites.map((js) => (
+                        <option key={js.jobsite_id} value={js.jobsite_id}>
+                          {js.name}
+                        </option>
+                      ))}
+                    </select>
+                    {sortedJobsites.length === 0 && (
+                      <p className="panel__hint">
+                        No jobsites yet — create one on the Jobsites tab first.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="form-actions">
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={handleCloseReassignModal}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn--primary"
+                    disabled={
+                      reassignSubmitting ||
+                      (reassignLocation === "jobsite" && !reassignJobsiteId)
+                    }
+                  >
+                    {reassignSubmitting ? "Saving…" : "Reassign"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Request Modal */}
       {requestModalItem && (

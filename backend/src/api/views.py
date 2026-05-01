@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout, get_user_model
-from .models import InventoryItem, MaterialRequest, Delivery, DeliveryItem
+from .models import InventoryItem, MaterialRequest, Delivery, DeliveryItem, Jobsite
 
 User = get_user_model()
 
@@ -128,6 +128,22 @@ def logout_view(request):
     return JsonResponse({"success": True, "message": "Logged out"})
 
 
+def _serialize_item(item):
+    return {
+        "item_id": item.item_id,
+        "name": item.name,
+        "description": item.description,
+        "type": item.type,
+        "location": item.location,
+        "jobsite_id": item.jobsite_id,
+        "jobsite_name": item.jobsite.name if item.jobsite_id else None,
+        "quantity": item.quantity,
+        "price": str(item.price),
+        "supplier": item.supplier,
+        "created_by": item.created_by.username,
+    }
+
+
 def inventory_list_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({"message": "Login required"}, status=401)
@@ -139,22 +155,14 @@ def inventory_list_view(request):
     if location_filter and location_filter in ["warehouse", "yard", "jobsite"]:
         items = items.filter(location=location_filter)
 
-    data = []
-    for item in items:
-        data.append(
-            {
-                "item_id": item.item_id,
-                "name": item.name,
-                "description": item.description,
-                "type": item.type,
-                "location": item.location,
-                "quantity": item.quantity,
-                "price": str(item.price),
-                "supplier": item.supplier,
-                "created_by": item.created_by.username,
-            }
-        )
+    jobsite_filter = request.GET.get("jobsite")
+    if jobsite_filter:
+        try:
+            items = items.filter(jobsite_id=int(jobsite_filter))
+        except (TypeError, ValueError):
+            pass
 
+    data = [_serialize_item(item) for item in items]
     return JsonResponse({"items": data})
 
 
@@ -175,6 +183,7 @@ def inventory_add_view(request):
     description = data.get("description", "").strip()
     item_type = data.get("type", "").strip().lower()
     location = data.get("location", "warehouse").strip().lower()
+    jobsite_id = data.get("jobsite_id")
     quantity = data.get("quantity")
     price = data.get("price")
     supplier = data.get("supplier", "").strip()
@@ -197,6 +206,18 @@ def inventory_add_view(request):
             status=400,
         )
 
+    jobsite = None
+    if location == "jobsite":
+        if not jobsite_id:
+            return JsonResponse(
+                {"message": "jobsite_id is required when location is 'jobsite'"},
+                status=400,
+            )
+        try:
+            jobsite = Jobsite.objects.get(jobsite_id=int(jobsite_id))
+        except (Jobsite.DoesNotExist, TypeError, ValueError):
+            return JsonResponse({"message": "Jobsite not found"}, status=404)
+
     try:
         quantity = int(quantity)
     except (TypeError, ValueError):
@@ -218,6 +239,7 @@ def inventory_add_view(request):
         description=description,
         type=item_type,
         location=location,
+        jobsite=jobsite,
         quantity=quantity,
         price=price,
         supplier=supplier,
@@ -228,19 +250,61 @@ def inventory_add_view(request):
         {
             "success": True,
             "message": "Item added successfully",
-            "item": {
-                "item_id": item.item_id,
-                "name": item.name,
-                "description": item.description,
-                "type": item.type,
-                "location": item.location,
-                "quantity": item.quantity,
-                "price": str(item.price),
-                "supplier": item.supplier,
-                "created_by": item.created_by.username,
-            },
+            "item": _serialize_item(item),
         },
         status=201,
+    )
+
+
+@csrf_exempt
+def inventory_reassign_view(request, item_id):
+    """PATCH: Reassign an item to a new location and/or jobsite."""
+    if request.method != "PATCH":
+        return JsonResponse({"message": "Only PATCH allowed"}, status=405)
+
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    try:
+        item = InventoryItem.objects.get(item_id=item_id)
+    except InventoryItem.DoesNotExist:
+        return JsonResponse({"message": "Item not found"}, status=404)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+    location = str(data.get("location", item.location)).strip().lower()
+    if location not in ["warehouse", "yard", "jobsite"]:
+        return JsonResponse(
+            {"message": "Location must be 'warehouse', 'yard', or 'jobsite'"},
+            status=400,
+        )
+
+    jobsite = None
+    if location == "jobsite":
+        jobsite_id = data.get("jobsite_id")
+        if not jobsite_id:
+            return JsonResponse(
+                {"message": "jobsite_id is required when reassigning to a jobsite"},
+                status=400,
+            )
+        try:
+            jobsite = Jobsite.objects.get(jobsite_id=int(jobsite_id))
+        except (Jobsite.DoesNotExist, TypeError, ValueError):
+            return JsonResponse({"message": "Jobsite not found"}, status=404)
+
+    item.location = location
+    item.jobsite = jobsite
+    item.save()
+
+    return JsonResponse(
+        {
+            "success": True,
+            "message": "Item reassigned",
+            "item": _serialize_item(item),
+        }
     )
 
 
@@ -418,6 +482,8 @@ def _serialize_delivery(delivery):
         "supplier": delivery.supplier,
         "received_by": delivery.received_by.username,
         "location": delivery.location,
+        "jobsite_id": delivery.jobsite_id,
+        "jobsite_name": delivery.jobsite.name if delivery.jobsite_id else None,
         "notes": delivery.notes,
         "received_at": delivery.received_at.isoformat(),
         "items": items,
@@ -445,6 +511,7 @@ def delivery_list_create_view(request):
 
         supplier = data.get("supplier", "").strip()
         location = data.get("location", "warehouse").strip().lower()
+        jobsite_id = data.get("jobsite_id")
         notes = data.get("notes", "").strip()
         items = data.get("items", [])
 
@@ -457,6 +524,18 @@ def delivery_list_create_view(request):
                 status=400,
             )
 
+        jobsite = None
+        if location == "jobsite":
+            if not jobsite_id:
+                return JsonResponse(
+                    {"message": "jobsite_id is required when delivering to a jobsite"},
+                    status=400,
+                )
+            try:
+                jobsite = Jobsite.objects.get(jobsite_id=int(jobsite_id))
+            except (Jobsite.DoesNotExist, TypeError, ValueError):
+                return JsonResponse({"message": "Jobsite not found"}, status=404)
+
         if not items or len(items) == 0:
             return JsonResponse({"message": "At least one item is required"}, status=400)
 
@@ -465,6 +544,7 @@ def delivery_list_create_view(request):
             supplier=supplier,
             received_by=request.user,
             location=location,
+            jobsite=jobsite,
             notes=notes,
         )
 
@@ -506,6 +586,7 @@ def delivery_list_create_view(request):
                     description=description or f"Received in delivery #{delivery.delivery_id}",
                     type=item_type if item_type in ["material", "equipment"] else "material",
                     location=location,
+                    jobsite=jobsite,
                     quantity=quantity,
                     price=Decimal("0.00"),
                     supplier=supplier,
@@ -616,3 +697,90 @@ def admin_user_update_view(request, user_id):
             "user": _serialize_user(target),
         }
     )
+
+
+def _serialize_jobsite(js, include_items=False):
+    data = {
+        "jobsite_id": js.jobsite_id,
+        "name": js.name,
+        "address": js.address,
+        "notes": js.notes,
+        "created_by": js.created_by.username if js.created_by else None,
+        "created_at": js.created_at.isoformat() if js.created_at else None,
+        "item_count": js.items.count(),
+        "total_quantity": sum(i.quantity for i in js.items.all()),
+    }
+    if include_items:
+        data["items"] = [_serialize_item(i) for i in js.items.all().order_by("item_id")]
+    return data
+
+
+@csrf_exempt
+def jobsite_list_create_view(request):
+    """GET: List all jobsites. POST: Create a new jobsite."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    if request.method == "GET":
+        jobsites = Jobsite.objects.all().order_by("name")
+        return JsonResponse(
+            {"jobsites": [_serialize_jobsite(j) for j in jobsites]}
+        )
+
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+        name = data.get("name", "").strip()
+        address = data.get("address", "").strip()
+        notes = data.get("notes", "").strip()
+
+        if not name:
+            return JsonResponse({"message": "Name is required"}, status=400)
+
+        if Jobsite.objects.filter(name__iexact=name).exists():
+            return JsonResponse(
+                {"message": "A jobsite with that name already exists"},
+                status=400,
+            )
+
+        jobsite = Jobsite.objects.create(
+            name=name,
+            address=address,
+            notes=notes,
+            created_by=request.user,
+        )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": "Jobsite created",
+                "jobsite": _serialize_jobsite(jobsite),
+            },
+            status=201,
+        )
+
+    return JsonResponse({"message": "Method not allowed"}, status=405)
+
+
+@csrf_exempt
+def jobsite_detail_view(request, jobsite_id):
+    """GET: Get a jobsite with its inventory. DELETE: Delete a jobsite."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    try:
+        jobsite = Jobsite.objects.get(jobsite_id=jobsite_id)
+    except Jobsite.DoesNotExist:
+        return JsonResponse({"message": "Jobsite not found"}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse({"jobsite": _serialize_jobsite(jobsite, include_items=True)})
+
+    if request.method == "DELETE":
+        jobsite.delete()
+        return JsonResponse({"success": True, "message": "Jobsite deleted"})
+
+    return JsonResponse({"message": "Method not allowed"}, status=405)

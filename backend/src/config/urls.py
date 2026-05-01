@@ -8,6 +8,7 @@ from api.views import (
     inventory_list_view,
     inventory_add_view,
     inventory_delete_view,
+    inventory_reassign_view,
     request_list_create_view,
     request_my_view,
     request_update_view,
@@ -15,6 +16,8 @@ from api.views import (
     delivery_detail_view,
     admin_users_list_view,
     admin_user_update_view,
+    jobsite_list_create_view,
+    jobsite_detail_view,
 )
 
 urlpatterns = [
@@ -26,6 +29,7 @@ urlpatterns = [
     path("api/inventory/", inventory_list_view),
     path("api/inventory/add/", inventory_add_view),
     path("api/inventory/<int:item_id>/", inventory_delete_view),
+    path("api/inventory/<int:item_id>/reassign/", inventory_reassign_view),
     path("api/requests/", request_list_create_view),
     path("api/requests/mine/", request_my_view),
     path("api/requests/<int:request_id>/", request_update_view),
@@ -33,4 +37,6 @@ urlpatterns = [
     path("api/deliveries/<int:delivery_id>/", delivery_detail_view),
     path("api/admin/users/", admin_users_list_view),
     path("api/admin/users/<int:user_id>/", admin_user_update_view),
+    path("api/jobsites/", jobsite_list_create_view),
+    path("api/jobsites/<int:jobsite_id>/", jobsite_detail_view),
 ]

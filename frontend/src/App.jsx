@@ -8,6 +8,7 @@ import RequestsPage from "./pages/RequestsPage";
 import DeliveriesPage from "./pages/DeliveriesPage";
 import AccountPage from "./pages/AccountPage";
 import AdminPage from "./pages/AdminPage";
+import JobsitesPage from "./pages/JobsitesPage";
 import { apiFetch } from "./api";
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
   const [materialRequests, setMaterialRequests] = useState([]);
   const [deliveries, setDeliveries] = useState([]);
   const [users, setUsers] = useState([]);
+  const [jobsites, setJobsites] = useState([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -58,6 +60,7 @@ function App() {
     setMaterialRequests([]);
     setDeliveries([]);
     setUsers([]);
+    setJobsites([]);
     setMessage("");
     setError("");
   };
@@ -306,6 +309,106 @@ function App() {
     }
   };
 
+  const handleLoadJobsites = async () => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch("/api/jobsites/");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not load jobsites");
+        return;
+      }
+
+      setJobsites(data.jobsites);
+    } catch {
+      setError("Could not connect to server");
+    }
+  };
+
+  const handleCreateJobsite = async (jobsiteData) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch("/api/jobsites/", {
+        method: "POST",
+        body: JSON.stringify(jobsiteData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not create jobsite");
+        return false;
+      }
+
+      setJobsites((prev) =>
+        [...prev, data.jobsite].sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setMessage(data.message);
+      return true;
+    } catch {
+      setError("Could not connect to server");
+      return false;
+    }
+  };
+
+  const handleDeleteJobsite = async (jobsiteId) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch(`/api/jobsites/${jobsiteId}/`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not delete jobsite");
+        return;
+      }
+
+      setJobsites((prev) => prev.filter((j) => j.jobsite_id !== jobsiteId));
+      setMessage(data.message);
+      // Items previously assigned to this jobsite are now unassigned
+      handleLoadInventory();
+    } catch {
+      setError("Could not connect to server");
+    }
+  };
+
+  const handleReassignItem = async (itemId, payload) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch(`/api/inventory/${itemId}/reassign/`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not reassign item");
+        return false;
+      }
+
+      setInventoryItems((prev) =>
+        prev.map((item) => (item.item_id === itemId ? data.item : item))
+      );
+      setMessage(data.message);
+      return true;
+    } catch {
+      setError("Could not connect to server");
+      return false;
+    }
+  };
+
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
   }
@@ -355,9 +458,12 @@ function App() {
               loggedInUser={loggedInUser}
               onLogout={handleLogout}
               inventoryItems={inventoryItems}
+              jobsites={jobsites}
               onLoadInventory={handleLoadInventory}
+              onLoadJobsites={handleLoadJobsites}
               onAddItem={handleAddItem}
               onDeleteItem={handleDeleteItem}
+              onReassignItem={handleReassignItem}
               onCreateRequest={handleCreateRequest}
               message={message}
               error={error}
@@ -394,9 +500,11 @@ function App() {
               loggedInUser={loggedInUser}
               deliveries={deliveries}
               inventoryItems={inventoryItems}
+              jobsites={jobsites}
               onLoadDeliveries={handleLoadDeliveries}
               onCreateDelivery={handleCreateDelivery}
               onLoadInventory={handleLoadInventory}
+              onLoadJobsites={handleLoadJobsites}
               message={message}
               error={error}
             />
@@ -413,6 +521,28 @@ function App() {
             <AccountPage
               loggedInUser={loggedInUser}
               onLogout={handleLogout}
+            />
+          ) : (
+            <Navigate to="/" />
+          )
+        }
+      />
+
+      <Route
+        path="/jobsites"
+        element={
+          loggedInUser ? (
+            <JobsitesPage
+              loggedInUser={loggedInUser}
+              jobsites={jobsites}
+              inventoryItems={inventoryItems}
+              onLoadJobsites={handleLoadJobsites}
+              onLoadInventory={handleLoadInventory}
+              onCreateJobsite={handleCreateJobsite}
+              onDeleteJobsite={handleDeleteJobsite}
+              onReassignItem={handleReassignItem}
+              message={message}
+              error={error}
             />
           ) : (
             <Navigate to="/" />

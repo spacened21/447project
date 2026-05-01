@@ -5,22 +5,32 @@ function DeliveriesPage({
   loggedInUser,
   deliveries,
   inventoryItems,
+  jobsites = [],
   onLoadDeliveries,
   onCreateDelivery,
   onLoadInventory,
+  onLoadJobsites,
   message,
   error,
 }) {
   const [showForm, setShowForm] = useState(false);
   const [supplier, setSupplier] = useState("");
   const [location, setLocation] = useState("warehouse");
+  const [jobsiteId, setJobsiteId] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState([{ item_name: "", item_type: "material", quantity: 1, description: "", existing_item_id: "" }]);
 
   useEffect(() => {
     onLoadDeliveries();
     onLoadInventory();
+    if (onLoadJobsites) {
+      onLoadJobsites();
+    }
   }, []);
+
+  const sortedJobsites = [...jobsites].sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
 
   const handleAddItemRow = () => {
     setItems([...items, { item_name: "", item_type: "material", quantity: 1, description: "", existing_item_id: "" }]);
@@ -56,7 +66,11 @@ function DeliveriesPage({
       return;
     }
 
-    const success = await onCreateDelivery({
+    if (location === "jobsite" && !jobsiteId) {
+      return;
+    }
+
+    const payload = {
       supplier,
       location,
       notes,
@@ -65,11 +79,18 @@ function DeliveriesPage({
         existing_item_id: i.existing_item_id ? parseInt(i.existing_item_id) : null,
         add_to_inventory: !i.existing_item_id,
       })),
-    });
+    };
+
+    if (location === "jobsite") {
+      payload.jobsite_id = parseInt(jobsiteId, 10);
+    }
+
+    const success = await onCreateDelivery(payload);
 
     if (success) {
       setSupplier("");
       setLocation("warehouse");
+      setJobsiteId("");
       setNotes("");
       setItems([{ item_name: "", item_type: "material", quantity: 1, description: "", existing_item_id: "" }]);
       setShowForm(false);
@@ -146,12 +167,43 @@ function DeliveriesPage({
 
                   <div className="field">
                     <label>Delivered To *</label>
-                    <select value={location} onChange={(e) => setLocation(e.target.value)}>
+                    <select
+                      value={location}
+                      onChange={(e) => {
+                        setLocation(e.target.value);
+                        if (e.target.value !== "jobsite") {
+                          setJobsiteId("");
+                        }
+                      }}
+                    >
                       <option value="warehouse">Warehouse</option>
                       <option value="yard">Yard</option>
                       <option value="jobsite">Jobsite</option>
                     </select>
                   </div>
+
+                  {location === "jobsite" && (
+                    <div className="field">
+                      <label>Jobsite *</label>
+                      <select
+                        value={jobsiteId}
+                        onChange={(e) => setJobsiteId(e.target.value)}
+                        required
+                      >
+                        <option value="">-- Select a jobsite --</option>
+                        {sortedJobsites.map((js) => (
+                          <option key={js.jobsite_id} value={js.jobsite_id}>
+                            {js.name}
+                          </option>
+                        ))}
+                      </select>
+                      {sortedJobsites.length === 0 && (
+                        <p className="panel__hint">
+                          No jobsites yet — create one on the Jobsites tab first.
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="field field--full">
                     <label>Notes</label>
@@ -284,7 +336,11 @@ function DeliveriesPage({
                           <strong>{delivery.supplier}</strong>
                         </td>
                         <td>
-                          <span className="badge badge--location">{delivery.location}</span>
+                          <span className="badge badge--location">
+                            {delivery.location === "jobsite" && delivery.jobsite_name
+                              ? `Jobsite: ${delivery.jobsite_name}`
+                              : delivery.location}
+                          </span>
                         </td>
                         <td>
                           <span className="delivery-items-preview">

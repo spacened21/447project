@@ -44,6 +44,14 @@ function Header({ loggedInUser }) {
           </button>
           <button
             className={`app-nav__link ${
+              location.pathname === "/jobsites" ? "app-nav__link--active" : ""
+            }`}
+            onClick={() => navigate("/jobsites")}
+          >
+            Jobsites
+          </button>
+          <button
+            className={`app-nav__link ${
               location.pathname === "/deliveries" ? "app-nav__link--active" : ""
             }`}
             onClick={() => navigate("/deliveries")}
