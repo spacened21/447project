@@ -13,6 +13,8 @@ const EMPTY_FORM = {
   supplier: "",
 };
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 function InventoryPage({
   loggedInUser,
   onLogout,
@@ -21,9 +23,10 @@ function InventoryPage({
   onLoadInventory,
   onLoadJobsites,
   onAddItem,
+  onUpdateItem,
   onDeleteItem,
-  onReassignItem,
   onReportItemStatus,
+  onUploadItemPhoto,
   onCreateRequest,
   message,
   error,
@@ -31,6 +34,7 @@ function InventoryPage({
   const navigate = useNavigate();
   const [showAddForm, setShowAddForm] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedForDelete, setSelectedForDelete] = useState([]);
   const [formValues, setFormValues] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,14 +44,17 @@ function InventoryPage({
   // Request modal state
   const [requestModalItem, setRequestModalItem] = useState(null);
   const [requestQuantity, setRequestQuantity] = useState("");
+  const [requestJobsiteId, setRequestJobsiteId] = useState("");
   const [requestNotes, setRequestNotes] = useState("");
   const [requestSubmitting, setRequestSubmitting] = useState(false);
 
-  // Reassign modal state
-  const [reassignItem, setReassignItem] = useState(null);
-  const [reassignLocation, setReassignLocation] = useState("warehouse");
-  const [reassignJobsiteId, setReassignJobsiteId] = useState("");
-  const [reassignSubmitting, setReassignSubmitting] = useState(false);
+  // Photo upload state
+  const [uploadingPhotoId, setUploadingPhotoId] = useState(null);
+
+  // Edit modal state
+  const [editItem, setEditItem] = useState(null);
+  const [editFormValues, setEditFormValues] = useState(EMPTY_FORM);
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   useEffect(() => {
     if (onLoadJobsites) {
@@ -132,6 +139,7 @@ function InventoryPage({
   const handleCloseRequestModal = () => {
     setRequestModalItem(null);
     setRequestQuantity("");
+    setRequestJobsiteId("");
     setRequestNotes("");
   };
 
@@ -139,11 +147,18 @@ function InventoryPage({
     e.preventDefault();
     setRequestSubmitting(true);
 
-    const success = await onCreateRequest({
+    const payload = {
       item_id: requestModalItem.item_id,
       quantity_requested: Number(requestQuantity),
       notes: requestNotes,
-    });
+    };
+
+    // Include jobsite if selected
+    if (requestJobsiteId) {
+      payload.jobsite_id = parseInt(requestJobsiteId, 10);
+    }
+
+    const success = await onCreateRequest(payload);
 
     setRequestSubmitting(false);
 
@@ -152,39 +167,69 @@ function InventoryPage({
     }
   };
 
-  const handleOpenReassignModal = (item) => {
-    setReassignItem(item);
-    setReassignLocation(item.location);
-    setReassignJobsiteId(item.jobsite_id ? String(item.jobsite_id) : "");
+  const handleOpenEditModal = (item) => {
+    setEditItem(item);
+    setEditFormValues({
+      name: item.name,
+      description: item.description,
+      type: item.type,
+      location: item.location,
+      jobsite_id: item.jobsite_id ? String(item.jobsite_id) : "",
+      quantity: String(item.quantity),
+      price: item.price,
+      supplier: item.supplier,
+    });
   };
 
-  const handleCloseReassignModal = () => {
-    setReassignItem(null);
-    setReassignJobsiteId("");
+  const handleCloseEditModal = () => {
+    setEditItem(null);
+    setEditFormValues(EMPTY_FORM);
   };
 
-  const handleSubmitReassign = async (e) => {
+  const handleEditFieldChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormValues((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmitEdit = async (e) => {
     e.preventDefault();
-    setReassignSubmitting(true);
+    setEditSubmitting(true);
 
-    const payload = { location: reassignLocation };
-    if (reassignLocation === "jobsite") {
-      payload.jobsite_id = reassignJobsiteId
-        ? parseInt(reassignJobsiteId, 10)
-        : null;
+    const payload = {
+      name: editFormValues.name,
+      description: editFormValues.description,
+      type: editFormValues.type,
+      location: editFormValues.location,
+      quantity: Number(editFormValues.quantity),
+      price: editFormValues.price,
+      supplier: editFormValues.supplier,
+    };
+
+    if (editFormValues.location === "jobsite" && editFormValues.jobsite_id) {
+      payload.jobsite_id = parseInt(editFormValues.jobsite_id, 10);
     }
 
-    const success = await onReassignItem(reassignItem.item_id, payload);
-    setReassignSubmitting(false);
+    const success = await onUpdateItem(editItem.item_id, payload);
+    setEditSubmitting(false);
 
     if (success) {
-      handleCloseReassignModal();
+      handleCloseEditModal();
     }
   };
 
   const sortedJobsites = [...jobsites].sort((a, b) =>
     a.name.localeCompare(b.name)
   );
+
+  const handlePhotoUpload = async (itemId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingPhotoId(itemId);
+    await onUploadItemPhoto(itemId, file);
+    setUploadingPhotoId(null);
+    e.target.value = "";
+  };
 
   return (
     <div className="app-shell">
@@ -203,36 +248,52 @@ function InventoryPage({
             </div>
 
             <div className="page-actions">
-              <button
-                className="btn btn--outline"
-                onClick={() => {
-                  setShowAddForm(false);
-                  setDeleteMode(false);
-                  onLoadInventory();
-                }}
-              >
-                Refresh
-              </button>
-              <button
-                className={`btn ${
-                  deleteMode ? "btn--ghost" : "btn--danger"
-                }`}
-                onClick={() => {
-                  setShowAddForm(false);
-                  setDeleteMode((prev) => !prev);
-                }}
-              >
-                {deleteMode ? "Done deleting" : "Delete items"}
-              </button>
-              <button
-                className="btn btn--primary"
-                onClick={() => {
-                  setDeleteMode(false);
-                  setShowAddForm((prev) => !prev);
-                }}
-              >
-                {showAddForm ? "Cancel" : "+ Add item"}
-              </button>
+              {deleteMode ? (
+                <>
+                  {selectedForDelete.length > 0 && (
+                    <button
+                      className="btn btn--danger"
+                      onClick={() => {
+                        if (window.confirm(`Delete ${selectedForDelete.length} item(s)? This cannot be undone.`)) {
+                          selectedForDelete.forEach((id) => onDeleteItem(id));
+                          setSelectedForDelete([]);
+                          setDeleteMode(false);
+                        }
+                      }}
+                    >
+                      Delete {selectedForDelete.length} item(s)
+                    </button>
+                  )}
+                  <button
+                    className="btn btn--ghost"
+                    onClick={() => {
+                      setDeleteMode(false);
+                      setSelectedForDelete([]);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="btn btn--danger"
+                    onClick={() => {
+                      setShowAddForm(false);
+                      setDeleteMode(true);
+                      setSelectedForDelete([]);
+                    }}
+                  >
+                    Delete items
+                  </button>
+                  <button
+                    className="btn btn--primary"
+                    onClick={() => setShowAddForm((prev) => !prev)}
+                  >
+                    {showAddForm ? "Cancel" : "+ Add item"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -264,7 +325,7 @@ function InventoryPage({
               <form onSubmit={handleSubmitAdd}>
                 <div className="form-grid">
                   <div className="field">
-                    <label htmlFor="name">Name</label>
+                    <label htmlFor="name">Name *</label>
                     <input
                       id="name"
                       name="name"
@@ -283,7 +344,6 @@ function InventoryPage({
                       value={formValues.description}
                       onChange={handleFieldChange}
                       placeholder="Short description of the item"
-                      required
                     />
                   </div>
 
@@ -316,7 +376,7 @@ function InventoryPage({
 
                   {formValues.location === "jobsite" && (
                     <div className="field">
-                      <label htmlFor="jobsite_id">Jobsite</label>
+                      <label htmlFor="jobsite_id">Jobsite *</label>
                       <select
                         id="jobsite_id"
                         name="jobsite_id"
@@ -341,7 +401,7 @@ function InventoryPage({
                   )}
 
                   <div className="field">
-                    <label htmlFor="quantity">Quantity</label>
+                    <label htmlFor="quantity">Quantity *</label>
                     <input
                       id="quantity"
                       name="quantity"
@@ -355,7 +415,7 @@ function InventoryPage({
                   </div>
 
                   <div className="field">
-                    <label htmlFor="price">Price (USD)</label>
+                    <label htmlFor="price">Price (USD) *</label>
                     <input
                       id="price"
                       name="price"
@@ -369,7 +429,7 @@ function InventoryPage({
                   </div>
 
                   <div className="field">
-                    <label htmlFor="supplier">Supplier</label>
+                    <label htmlFor="supplier">Supplier *</label>
                     <input
                       id="supplier"
                       name="supplier"
@@ -478,102 +538,131 @@ function InventoryPage({
                   <div className="empty-state__hint">
                     {searchQuery
                       ? "Try adjusting your search terms."
-                      : "Hit Refresh to pull the latest items, or add one to get started."}
+                      : "No items in inventory yet. Add one to get started."}
                   </div>
                 </div>
               ) : (
-                <table className="inventory-table">
+                <table className="inventory-table inventory-table--compact">
                   <thead>
                     <tr>
-                      <th>ID</th>
-                      <th>Name</th>
-                      <th>Description</th>
-                      <th>Type</th>
+                      {deleteMode && <th className="checkbox-col"></th>}
+                      <th>Photo</th>
+                      <th>Item</th>
                       <th>Location</th>
-                      <th>Status</th>
-                      <th>Quantity</th>
-                      <th>Price</th>
-                      <th>Supplier</th>
-                      <th>Created by</th>
-                      <th>Actions</th>
+                      <th className="text-center">Status</th>
+                      <th className="text-center">Qty</th>
+                      <th>Details</th>
+                      {!deleteMode && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {filteredItems.map((item) => (
-                      <tr key={item.item_id} className={item.status === "missing" ? "row--missing" : ""}>
-                        <td className="mono">#{item.item_id}</td>
+                      <tr key={item.item_id} className={`${item.status === "missing" ? "row--missing" : ""} ${selectedForDelete.includes(item.item_id) ? "row--selected" : ""}`}>
+                        {deleteMode && (
+                          <td className="checkbox-col">
+                            <input
+                              type="checkbox"
+                              checked={selectedForDelete.includes(item.item_id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedForDelete((prev) => [...prev, item.item_id]);
+                                } else {
+                                  setSelectedForDelete((prev) => prev.filter((id) => id !== item.item_id));
+                                }
+                              }}
+                            />
+                          </td>
+                        )}
                         <td>
-                          <strong>{item.name}</strong>
+                          <label className="item-photo-btn item-photo-btn--small">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              hidden
+                              onChange={(e) => handlePhotoUpload(item.item_id, e)}
+                              disabled={uploadingPhotoId === item.item_id}
+                            />
+                            {uploadingPhotoId === item.item_id ? (
+                              <span className="photo-loading">...</span>
+                            ) : item.photo_url ? (
+                              <img
+                                src={`${API_BASE}${item.photo_url}`}
+                                alt={item.name}
+                                className="item-photo-thumb"
+                              />
+                            ) : (
+                              <span className="photo-placeholder">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                                  <polyline points="21 15 16 10 5 21"/>
+                                </svg>
+                              </span>
+                            )}
+                          </label>
                         </td>
-                        <td>{item.description}</td>
                         <td>
-                          <span
-                            className={`badge ${
-                              item.type === "equipment"
-                                ? "badge--red"
-                                : "badge--blue"
-                            }`}
-                          >
-                            {item.type}
-                          </span>
+                          <div className="item-cell">
+                            <strong className="item-cell__name">{item.name}</strong>
+                            <span className="item-cell__desc">{item.description}</span>
+                            <span className={`badge badge--tiny ${item.type === "equipment" ? "badge--red" : "badge--blue"}`}>
+                              {item.type}
+                            </span>
+                          </div>
                         </td>
                         <td>
                           <span className="badge badge--location">
                             {item.location === "jobsite" && item.jobsite_name
-                              ? `Jobsite: ${item.jobsite_name}`
+                              ? item.jobsite_name
                               : item.location}
                           </span>
                         </td>
-                        <td>
+                        <td className="text-center">
                           <span className={`badge ${item.status === "missing" ? "badge--missing" : "badge--available"}`}>
-                            {item.status === "missing" ? "Missing" : "Available"}
+                            {item.status === "missing" ? "Missing" : "In Stock"}
                           </span>
                         </td>
-                        <td className="mono">{item.quantity}</td>
-                        <td className="mono">${item.price}</td>
-                        <td>{item.supplier}</td>
+                        <td className="text-center mono">{item.quantity}</td>
                         <td>
-                          <span className="badge badge--neutral">
-                            {item.created_by}
-                          </span>
+                          <div className="details-cell">
+                            <span className="details-cell__price">${item.price}</span>
+                            <span className="details-cell__supplier">{item.supplier}</span>
+                          </div>
                         </td>
-                        <td className="actions-cell">
-                          {item.status === "missing" ? (
+                        {!deleteMode && (
+                          <td className="actions-cell">
+                            {item.status === "missing" ? (
+                              <button
+                                className="btn btn--success btn--sm"
+                                onClick={() => onReportItemStatus(item.item_id, "available")}
+                              >
+                                Found
+                              </button>
+                            ) : (
+                              <button
+                                className="btn btn--warning btn--sm"
+                                onClick={() => onReportItemStatus(item.item_id, "missing")}
+                              >
+                                Missing
+                              </button>
+                            )}
                             <button
-                              className="btn btn--success small-button"
-                              onClick={() => onReportItemStatus(item.item_id, "available")}
+                              className="btn btn--outline btn--sm"
+                              onClick={() => handleOpenRequestModal(item)}
                             >
-                              Mark Found
+                              Request
                             </button>
-                          ) : (
                             <button
-                              className="btn btn--warning small-button"
-                              onClick={() => onReportItemStatus(item.item_id, "missing")}
+                              className="btn btn--icon btn--sm"
+                              onClick={() => handleOpenEditModal(item)}
+                              title="Edit item"
                             >
-                              Report Missing
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                              </svg>
                             </button>
-                          )}
-                          <button
-                            className="btn btn--request small-button"
-                            onClick={() => handleOpenRequestModal(item)}
-                          >
-                            Request
-                          </button>
-                          <button
-                            className="btn btn--outline small-button"
-                            onClick={() => handleOpenReassignModal(item)}
-                          >
-                            Reassign
-                          </button>
-                          {deleteMode && (
-                            <button
-                              className="btn btn--danger small-button"
-                              onClick={() => onDeleteItem(item.item_id)}
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </td>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -583,97 +672,6 @@ function InventoryPage({
           </section>
         </div>
       </main>
-
-      {/* Reassign Modal */}
-      {reassignItem && (
-        <div className="modal-overlay" onClick={handleCloseReassignModal}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal__header">
-              <h2 className="modal__title">Reassign item</h2>
-              <button
-                className="modal__close"
-                onClick={handleCloseReassignModal}
-                aria-label="Close modal"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="modal__body">
-              <p className="modal__item-info">
-                <strong>{reassignItem.name}</strong>
-                <br />
-                <span className="modal__item-stock">
-                  Currently at:{" "}
-                  {reassignItem.location === "jobsite" &&
-                  reassignItem.jobsite_name
-                    ? `${reassignItem.jobsite_name} (jobsite)`
-                    : reassignItem.location}
-                </span>
-              </p>
-
-              <form onSubmit={handleSubmitReassign}>
-                <div className="field">
-                  <label htmlFor="reassign-location">New location</label>
-                  <select
-                    id="reassign-location"
-                    value={reassignLocation}
-                    onChange={(e) => setReassignLocation(e.target.value)}
-                  >
-                    <option value="warehouse">Warehouse</option>
-                    <option value="yard">Yard</option>
-                    <option value="jobsite">Jobsite</option>
-                  </select>
-                </div>
-
-                {reassignLocation === "jobsite" && (
-                  <div className="field">
-                    <label htmlFor="reassign-jobsite">Jobsite</label>
-                    <select
-                      id="reassign-jobsite"
-                      value={reassignJobsiteId}
-                      onChange={(e) => setReassignJobsiteId(e.target.value)}
-                      required
-                    >
-                      <option value="">-- Select a jobsite --</option>
-                      {sortedJobsites.map((js) => (
-                        <option key={js.jobsite_id} value={js.jobsite_id}>
-                          {js.name}
-                        </option>
-                      ))}
-                    </select>
-                    {sortedJobsites.length === 0 && (
-                      <p className="panel__hint">
-                        No jobsites yet — create one on the Jobsites tab first.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <div className="form-actions">
-                  <button
-                    type="button"
-                    className="btn btn--ghost"
-                    onClick={handleCloseReassignModal}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn--primary"
-                    disabled={
-                      reassignSubmitting ||
-                      (reassignLocation === "jobsite" && !reassignJobsiteId)
-                    }
-                  >
-                    {reassignSubmitting ? "Saving…" : "Reassign"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Request Modal */}
       {requestModalItem && (
@@ -695,7 +693,7 @@ function InventoryPage({
                 <strong>{requestModalItem.name}</strong>
                 <br />
                 <span className="modal__item-stock">
-                  Available: {requestModalItem.quantity} units
+                  Currently in stock: {requestModalItem.quantity} units
                 </span>
               </p>
 
@@ -706,12 +704,27 @@ function InventoryPage({
                     id="requestQuantity"
                     type="number"
                     min="1"
-                    max={requestModalItem.quantity}
                     value={requestQuantity}
                     onChange={(e) => setRequestQuantity(e.target.value)}
                     placeholder="Enter quantity"
                     required
                   />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="requestJobsite">Destination jobsite</label>
+                  <select
+                    id="requestJobsite"
+                    value={requestJobsiteId}
+                    onChange={(e) => setRequestJobsiteId(e.target.value)}
+                  >
+                    <option value="">-- No specific jobsite --</option>
+                    {sortedJobsites.map((js) => (
+                      <option key={js.jobsite_id} value={js.jobsite_id}>
+                        {js.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="field">
@@ -739,6 +752,153 @@ function InventoryPage({
                     disabled={requestSubmitting}
                   >
                     {requestSubmitting ? "Submitting..." : "Submit Request"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editItem && (
+        <div className="modal-overlay" onClick={handleCloseEditModal}>
+          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <h2 className="modal__title">Edit Item</h2>
+              <button
+                className="modal__close"
+                onClick={handleCloseEditModal}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal__body">
+              <form onSubmit={handleSubmitEdit}>
+                <div className="form-grid">
+                  <div className="field">
+                    <label htmlFor="edit-name">Name *</label>
+                    <input
+                      id="edit-name"
+                      name="name"
+                      value={editFormValues.name}
+                      onChange={handleEditFieldChange}
+                      required
+                    />
+                  </div>
+
+                  <div className="field field--full">
+                    <label htmlFor="edit-description">Description</label>
+                    <input
+                      id="edit-description"
+                      name="description"
+                      value={editFormValues.description}
+                      onChange={handleEditFieldChange}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="edit-type">Type</label>
+                    <select
+                      id="edit-type"
+                      name="type"
+                      value={editFormValues.type}
+                      onChange={handleEditFieldChange}
+                    >
+                      <option value="material">Material</option>
+                      <option value="equipment">Equipment</option>
+                    </select>
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="edit-location">Location</label>
+                    <select
+                      id="edit-location"
+                      name="location"
+                      value={editFormValues.location}
+                      onChange={handleEditFieldChange}
+                    >
+                      <option value="warehouse">Warehouse</option>
+                      <option value="yard">Yard</option>
+                      <option value="jobsite">Jobsite</option>
+                    </select>
+                  </div>
+
+                  {editFormValues.location === "jobsite" && (
+                    <div className="field">
+                      <label htmlFor="edit-jobsite">Jobsite *</label>
+                      <select
+                        id="edit-jobsite"
+                        name="jobsite_id"
+                        value={editFormValues.jobsite_id}
+                        onChange={handleEditFieldChange}
+                        required
+                      >
+                        <option value="">-- Select a jobsite --</option>
+                        {sortedJobsites.map((js) => (
+                          <option key={js.jobsite_id} value={js.jobsite_id}>
+                            {js.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="field">
+                    <label htmlFor="edit-quantity">Quantity *</label>
+                    <input
+                      id="edit-quantity"
+                      name="quantity"
+                      type="number"
+                      min="0"
+                      value={editFormValues.quantity}
+                      onChange={handleEditFieldChange}
+                      required
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="edit-price">Price (USD) *</label>
+                    <input
+                      id="edit-price"
+                      name="price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editFormValues.price}
+                      onChange={handleEditFieldChange}
+                      required
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="edit-supplier">Supplier *</label>
+                    <input
+                      id="edit-supplier"
+                      name="supplier"
+                      value={editFormValues.supplier}
+                      onChange={handleEditFieldChange}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-actions">
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={handleCloseEditModal}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn--primary"
+                    disabled={editSubmitting}
+                  >
+                    {editSubmitting ? "Saving..." : "Save Changes"}
                   </button>
                 </div>
               </form>

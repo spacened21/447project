@@ -15,10 +15,13 @@ function DeliveriesPage({
   deliveries,
   inventoryItems,
   jobsites = [],
+  materialRequests = [],
   onLoadDeliveries,
   onCreateDelivery,
+  onDeleteDelivery,
   onLoadInventory,
   onLoadJobsites,
+  onLoadRequests,
   onUploadPackingSlip,
   message,
   error,
@@ -30,6 +33,7 @@ function DeliveriesPage({
   const [jobsiteId, setJobsiteId] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState([{ item_name: "", item_type: "material", quantity: 1, description: "", existing_item_id: "" }]);
+  const [selectedRequestIds, setSelectedRequestIds] = useState([]);
 
   useEffect(() => {
     onLoadDeliveries();
@@ -37,19 +41,66 @@ function DeliveriesPage({
     if (onLoadJobsites) {
       onLoadJobsites();
     }
+    if (onLoadRequests) {
+      onLoadRequests();
+    }
   }, []);
 
   const sortedJobsites = [...jobsites].sort((a, b) =>
     a.name.localeCompare(b.name)
   );
 
+  // Get approved requests that can be fulfilled
+  const approvedRequests = materialRequests.filter((r) => r.status === "approved");
+
+  const handleRequestToggle = (requestId) => {
+    const request = approvedRequests.find((r) => r.request_id === requestId);
+    if (!request) return;
+
+    if (selectedRequestIds.includes(requestId)) {
+      // Deselecting - remove from selected and remove auto-added item
+      setSelectedRequestIds((prev) => prev.filter((id) => id !== requestId));
+      setItems((prev) => prev.filter((item) => item.from_request_id !== requestId));
+    } else {
+      // Selecting - add to selected and auto-add item
+      setSelectedRequestIds((prev) => [...prev, requestId]);
+      setItems((prev) => [
+        ...prev,
+        {
+          item_name: request.item_name,
+          item_type: "material",
+          quantity: request.quantity_requested,
+          description: `Fulfilling request #${requestId}`,
+          existing_item_id: String(request.item_id),
+          from_request_id: requestId,
+        },
+      ]);
+    }
+  };
+
   const handleAddItemRow = () => {
     setItems([...items, { item_name: "", item_type: "material", quantity: 1, description: "", existing_item_id: "" }]);
   };
 
   const handleRemoveItemRow = (index) => {
-    if (items.length > 1) {
-      setItems(items.filter((_, i) => i !== index));
+    const itemToRemove = items[index];
+
+    // If this item came from a request, deselect that request
+    if (itemToRemove.from_request_id) {
+      setSelectedRequestIds((prev) =>
+        prev.filter((id) => id !== itemToRemove.from_request_id)
+      );
+    }
+
+    // Remove the item (allow removing last item only if it's from a request)
+    if (items.length > 1 || itemToRemove.from_request_id) {
+      const newItems = items.filter((_, i) => i !== index);
+      // Ensure at least one empty row remains for manual entry
+      if (newItems.length === 0) {
+        setItems([{ item_name: "", item_type: "material", quantity: 1, description: "", existing_item_id: "" }]);
+      } else {
+        setItems(newItems);
+      }
     }
   };
 
@@ -90,6 +141,7 @@ function DeliveriesPage({
         existing_item_id: i.existing_item_id ? parseInt(i.existing_item_id) : null,
         add_to_inventory: !i.existing_item_id,
       })),
+      fulfill_request_ids: selectedRequestIds,
     };
 
     if (location === "jobsite") {
@@ -104,7 +156,12 @@ function DeliveriesPage({
       setJobsiteId("");
       setNotes("");
       setItems([{ item_name: "", item_type: "material", quantity: 1, description: "", existing_item_id: "" }]);
+      setSelectedRequestIds([]);
       setShowForm(false);
+      // Refresh requests to show updated status
+      if (onLoadRequests) {
+        onLoadRequests();
+      }
     }
   };
 
@@ -151,9 +208,6 @@ function DeliveriesPage({
             </div>
 
             <div className="page-actions">
-              <button className="btn btn--outline" onClick={onLoadDeliveries}>
-                Refresh
-              </button>
               <button className="btn btn--primary" onClick={() => setShowForm(!showForm)}>
                 {showForm ? "Cancel" : "+ Log Delivery"}
               </button>
@@ -244,75 +298,109 @@ function DeliveriesPage({
                   </div>
                 </div>
 
-                <div className="delivery-items-section">
-                  <div className="delivery-items-header">
-                    <h3>Items Received</h3>
-                    <button type="button" className="btn btn--outline small-button" onClick={handleAddItemRow}>
-                      + Add Item
+                {/* Fulfill Pending Requests - Simple Callout */}
+                {approvedRequests.length > 0 && (
+                  <div className="callout-box">
+                    <div className="callout-box__header">
+                      <div>
+                        <strong>Fulfill Pending Requests?</strong>
+                        <span className="callout-box__hint">Check any requests this delivery completes</span>
+                      </div>
+                    </div>
+                    <div className="callout-box__list">
+                      {approvedRequests.map((req) => (
+                        <label key={req.request_id} className={`callout-box__item ${selectedRequestIds.includes(req.request_id) ? "callout-box__item--selected" : ""}`}>
+                          <input
+                            type="checkbox"
+                            checked={selectedRequestIds.includes(req.request_id)}
+                            onChange={() => handleRequestToggle(req.request_id)}
+                          />
+                          <span><strong>{req.item_name}</strong> × {req.quantity_requested}</span>
+                          <span className="callout-box__requester">by {req.requester}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Items Received - Clean Table */}
+                <div className="delivery-items-simple">
+                  <div className="delivery-items-simple__header">
+                    <strong>Items Received</strong>
+                    <button type="button" className="btn btn--outline btn--sm" onClick={handleAddItemRow}>
+                      + Add Row
                     </button>
                   </div>
 
-                  {items.map((item, index) => (
-                    <div key={index} className="delivery-item-row">
-                      <div className="field">
-                        <label>Add to existing item?</label>
-                        <select
-                          value={item.existing_item_id}
-                          onChange={(e) => handleItemChange(index, "existing_item_id", e.target.value)}
-                        >
-                          <option value="">-- New Item --</option>
-                          {inventoryItems.map((inv) => (
-                            <option key={inv.item_id} value={inv.item_id}>
-                              {inv.name} (current: {inv.quantity})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="field">
-                        <label>Item Name *</label>
-                        <input
-                          type="text"
-                          value={item.item_name}
-                          onChange={(e) => handleItemChange(index, "item_name", e.target.value)}
-                          placeholder="e.g., Copper Pipe"
-                          disabled={!!item.existing_item_id}
-                        />
-                      </div>
-
-                      <div className="field">
-                        <label>Type</label>
-                        <select
-                          value={item.item_type}
-                          onChange={(e) => handleItemChange(index, "item_type", e.target.value)}
-                          disabled={!!item.existing_item_id}
-                        >
-                          <option value="material">Material</option>
-                          <option value="equipment">Equipment</option>
-                        </select>
-                      </div>
-
-                      <div className="field">
-                        <label>Quantity *</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => handleItemChange(index, "quantity", parseInt(e.target.value) || 0)}
-                        />
-                      </div>
-
-                      {items.length > 1 && (
-                        <button
-                          type="button"
-                          className="btn btn--danger small-button remove-item-btn"
-                          onClick={() => handleRemoveItemRow(index)}
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                  <table className="delivery-items-table">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item, index) => (
+                        <tr key={index} className={item.from_request_id ? "row--from-request" : ""}>
+                          <td>
+                            {item.from_request_id ? (
+                              <div className="item-from-request">
+                                <span>{item.item_name}</span>
+                                <span className="badge badge--small badge--approved">Request #{item.from_request_id}</span>
+                              </div>
+                            ) : (
+                              <select
+                                value={item.existing_item_id}
+                                onChange={(e) => {
+                                  handleItemChange(index, "existing_item_id", e.target.value);
+                                }}
+                                className="item-select"
+                              >
+                                <option value="">Type new item name...</option>
+                                {inventoryItems.map((inv) => (
+                                  <option key={inv.item_id} value={inv.item_id}>
+                                    {inv.name} (+{inv.quantity} in stock)
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            {!item.from_request_id && !item.existing_item_id && (
+                              <input
+                                type="text"
+                                value={item.item_name}
+                                onChange={(e) => handleItemChange(index, "item_name", e.target.value)}
+                                placeholder="New item name"
+                                className="item-name-input"
+                              />
+                            )}
+                          </td>
+                          <td className="qty-cell">
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => handleItemChange(index, "quantity", parseInt(e.target.value) || 0)}
+                              className="qty-input"
+                              disabled={!!item.from_request_id}
+                            />
+                          </td>
+                          <td className="remove-cell">
+                            {(items.length > 1 || item.from_request_id) && (
+                              <button
+                                type="button"
+                                className="btn btn--icon btn--remove"
+                                onClick={() => handleRemoveItemRow(index)}
+                                title="Remove"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
 
                 <div className="form-actions">
@@ -320,7 +408,7 @@ function DeliveriesPage({
                     Cancel
                   </button>
                   <button type="submit" className="btn btn--primary">
-                    Log Delivery
+                    Log Delivery{selectedRequestIds.length > 0 && ` & Fulfill ${selectedRequestIds.length} Request(s)`}
                   </button>
                 </div>
               </form>
@@ -355,12 +443,13 @@ function DeliveriesPage({
                       <th>Total Qty</th>
                       <th>Received By</th>
                       <th>Notes</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {deliveries.map((delivery) => (
                       <tr key={delivery.delivery_id}>
-                        <td className="mono">{formatDate(delivery.received_at)}</td>
+                        <td className="mono nowrap">{formatDate(delivery.received_at)}</td>
                         <td>
                           <strong>{delivery.supplier}</strong>
                         </td>
@@ -404,6 +493,18 @@ function DeliveriesPage({
                           <span className="badge badge--neutral">{delivery.received_by}</span>
                         </td>
                         <td className="notes-cell">{delivery.notes || "—"}</td>
+                        <td>
+                          <button
+                            className="btn btn--danger btn--sm"
+                            onClick={() => {
+                              if (window.confirm(`Delete delivery #${delivery.delivery_id}? This cannot be undone.`)) {
+                                onDeleteDelivery(delivery.delivery_id);
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -56,12 +56,6 @@ function AdminPage({
                 Manage user accounts, deactivate access, and assign admin roles.
               </p>
             </div>
-
-            <div className="page-actions">
-              <button className="btn btn--outline" onClick={onLoadUsers}>
-                Refresh
-              </button>
-            </div>
           </div>
 
           {message && (

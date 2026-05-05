@@ -141,16 +141,6 @@ function JobsitesPage({
 
             <div className="page-actions">
               <button
-                className="btn btn--outline"
-                onClick={() => {
-                  setShowAddForm(false);
-                  onLoadJobsites();
-                  onLoadInventory();
-                }}
-              >
-                Refresh
-              </button>
-              <button
                 className="btn btn--primary"
                 onClick={() => setShowAddForm((prev) => !prev)}
               >

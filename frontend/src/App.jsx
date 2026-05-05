@@ -41,14 +41,15 @@ function App() {
   };
 
   useEffect(() => {
-    loadSession()
-      .then((isAuthenticated) => {
-        if (isAuthenticated) {
-          return handleLoadInventory();
-        }
-      })
-      .finally(() => setLoading(false));
+    loadSession().finally(() => setLoading(false));
   }, []);
+
+  // Load inventory when user logs in
+  useEffect(() => {
+    if (loggedInUser) {
+      handleLoadInventory();
+    }
+  }, [loggedInUser]);
 
   const handleLogout = async () => {
     await apiFetch("/api/logout/", {
@@ -279,6 +280,31 @@ function App() {
     }
   };
 
+  const handleDeleteDelivery = async (deliveryId) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch(`/api/deliveries/${deliveryId}/`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not delete delivery");
+        return false;
+      }
+
+      setDeliveries((prev) => prev.filter((d) => d.delivery_id !== deliveryId));
+      setMessage(data.message);
+      return true;
+    } catch {
+      setError("Could not connect to server");
+      return false;
+    }
+  };
+
   const handleCreateDelivery = async (deliveryData) => {
     setError("");
     setMessage("");
@@ -465,6 +491,61 @@ function App() {
     }
   };
 
+  const handleUpdateItem = async (itemId, itemData) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch(`/api/inventory/${itemId}/edit/`, {
+        method: "PUT",
+        body: JSON.stringify(itemData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not update item");
+        return false;
+      }
+
+      setInventoryItems((prev) =>
+        prev.map((item) => (item.item_id === itemId ? data.item : item))
+      );
+      setMessage(data.message);
+      return true;
+    } catch {
+      setError("Could not connect to server");
+      return false;
+    }
+  };
+
+  const handleUploadItemPhoto = async (itemId, file) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("photo", file);
+
+      const res = await apiUpload(`/api/inventory/${itemId}/photo/`, formData);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not upload photo");
+        return false;
+      }
+
+      setInventoryItems((prev) =>
+        prev.map((item) => (item.item_id === itemId ? data.item : item))
+      );
+      setMessage(data.message);
+      return true;
+    } catch {
+      setError("Could not connect to server");
+      return false;
+    }
+  };
+
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
   }
@@ -518,9 +599,11 @@ function App() {
               onLoadInventory={handleLoadInventory}
               onLoadJobsites={handleLoadJobsites}
               onAddItem={handleAddItem}
+              onUpdateItem={handleUpdateItem}
               onDeleteItem={handleDeleteItem}
               onReassignItem={handleReassignItem}
               onReportItemStatus={handleReportItemStatus}
+              onUploadItemPhoto={handleUploadItemPhoto}
               onCreateRequest={handleCreateRequest}
               message={message}
               error={error}
@@ -539,7 +622,12 @@ function App() {
               loggedInUser={loggedInUser}
               onLogout={handleLogout}
               materialRequests={materialRequests}
+              inventoryItems={inventoryItems}
+              jobsites={jobsites}
               onLoadRequests={handleLoadRequests}
+              onLoadInventory={handleLoadInventory}
+              onLoadJobsites={handleLoadJobsites}
+              onCreateRequest={handleCreateRequest}
               onUpdateRequestStatus={handleUpdateRequestStatus}
               message={message}
               error={error}
@@ -559,10 +647,13 @@ function App() {
               deliveries={deliveries}
               inventoryItems={inventoryItems}
               jobsites={jobsites}
+              materialRequests={materialRequests}
               onLoadDeliveries={handleLoadDeliveries}
               onCreateDelivery={handleCreateDelivery}
+              onDeleteDelivery={handleDeleteDelivery}
               onLoadInventory={handleLoadInventory}
               onLoadJobsites={handleLoadJobsites}
+              onLoadRequests={handleLoadRequests}
               onUploadPackingSlip={handleUploadPackingSlip}
               message={message}
               error={error}
