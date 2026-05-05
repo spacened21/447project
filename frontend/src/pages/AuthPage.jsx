@@ -15,13 +15,11 @@ function AuthPage({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("user");
 
   const clearForm = () => {
     setUsername("");
     setPassword("");
     setEmail("");
-    setRole("user");
   };
 
   const handleLogin = async (e) => {
@@ -64,7 +62,6 @@ function AuthPage({
           username,
           password,
           email,
-          role,
         }),
       });
 
@@ -168,19 +165,6 @@ function AuthPage({
               />
             </div>
 
-            {isRegistering && (
-              <div className="field">
-                <label htmlFor="auth-role">Role</label>
-                <select
-                  id="auth-role"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-            )}
 
             <button type="submit" className="btn btn--primary btn--block">
               {isRegistering ? "Create account" : "Log in"}

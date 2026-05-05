@@ -6,6 +6,7 @@ function RequestsPage({
   onLogout,
   materialRequests,
   onLoadRequests,
+  onUpdateRequestStatus,
   message,
   error,
 }) {
@@ -49,9 +50,9 @@ function RequestsPage({
           <div className="page-header">
             <div>
               <span className="page-header__eyebrow">Records</span>
-              <h1 className="page-header__title">Activity Log</h1>
+              <h1 className="page-header__title">Material Requests</h1>
               <p className="page-header__subtitle">
-                Track what materials have been taken and by whom.
+                Track material requests and their approval status.
               </p>
             </div>
 
@@ -78,10 +79,10 @@ function RequestsPage({
           <section className="table-card">
             <div className="table-card__header">
               <div>
-                <h2>Recent Activity</h2>
+                <h2>Request History</h2>
                 <p>
                   {filteredActivity.length}{" "}
-                  {filteredActivity.length === 1 ? "entry" : "entries"}
+                  {filteredActivity.length === 1 ? "request" : "requests"}
                 </p>
               </div>
 
@@ -92,7 +93,7 @@ function RequestsPage({
                     checked={myActivityOnly}
                     onChange={(e) => setMyActivityOnly(e.target.checked)}
                   />
-                  My activity only
+                  My requests only
                 </label>
               </div>
             </div>
@@ -100,28 +101,36 @@ function RequestsPage({
             <div className="table-wrapper">
               {filteredActivity.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-state__title">No activity yet</div>
+                  <div className="empty-state__title">No requests yet</div>
                   <div className="empty-state__hint">
                     {myActivityOnly
-                      ? "You haven't taken any materials yet."
-                      : "No materials have been taken yet."}
+                      ? "You haven't made any material requests yet."
+                      : "No material requests have been made yet."}
                   </div>
                 </div>
               ) : (
-                <table className="inventory-table activity-table">
+                <table className="inventory-table requests-table">
                   <thead>
                     <tr>
                       <th>Date</th>
+                      <th>Type</th>
                       <th>Item</th>
-                      <th>Quantity</th>
-                      <th>Taken By</th>
+                      <th>Qty</th>
+                      <th>Requested By</th>
+                      <th>Status</th>
                       <th>Notes</th>
+                      {loggedInUser.role === "admin" && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {filteredActivity.map((entry) => (
                       <tr key={entry.request_id}>
                         <td className="mono">{formatDate(entry.created_at)}</td>
+                        <td>
+                          <span className="badge badge--blue">
+                            Material Request
+                          </span>
+                        </td>
                         <td>
                           <strong>{entry.item_name}</strong>
                         </td>
@@ -131,7 +140,43 @@ function RequestsPage({
                             {entry.requester}
                           </span>
                         </td>
+                        <td>
+                          <span className={`badge badge--${entry.status}`}>
+                            {entry.status}
+                          </span>
+                        </td>
                         <td className="notes-cell">{entry.notes || "—"}</td>
+                        {loggedInUser.role === "admin" && (
+                          <td className="actions-cell">
+                            {entry.status === "pending" && (
+                              <>
+                                <button
+                                  className="btn btn--small btn--success"
+                                  onClick={() => onUpdateRequestStatus(entry.request_id, "approved")}
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  className="btn btn--small btn--danger"
+                                  onClick={() => onUpdateRequestStatus(entry.request_id, "denied")}
+                                >
+                                  Deny
+                                </button>
+                              </>
+                            )}
+                            {entry.status === "approved" && (
+                              <button
+                                className="btn btn--small btn--primary"
+                                onClick={() => onUpdateRequestStatus(entry.request_id, "fulfilled")}
+                              >
+                                Mark Fulfilled
+                              </button>
+                            )}
+                            {(entry.status === "fulfilled" || entry.status === "denied") && (
+                              <span className="text-muted">—</span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

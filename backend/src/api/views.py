@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout, get_user_model
+from django.utils import timezone
 from .models import InventoryItem, MaterialRequest, Delivery, DeliveryItem, Jobsite
 
 User = get_user_model()
@@ -21,7 +22,6 @@ def register_view(request):
     username = data.get("username", "").strip()
     password = data.get("password", "")
     email = data.get("email", "").strip()
-    role = data.get("role", "user").strip().lower()
 
     if not username or not password or not email:
         return JsonResponse(
@@ -29,8 +29,7 @@ def register_view(request):
             status=400,
         )
 
-    if role not in ["user", "admin"]:
-        return JsonResponse({"message": "Invalid role"}, status=400)
+    # All new users register as "user" - only admins can promote via admin panel
 
     if User.objects.filter(username=username).exists():
         return JsonResponse({"message": "Username already exists"}, status=400)
@@ -42,7 +41,7 @@ def register_view(request):
         username=username,
         password=password,
         email=email,
-        role=role,
+        role="user",  # Always register as user - admins promote via admin panel
     )
 
     return JsonResponse(
@@ -141,6 +140,9 @@ def _serialize_item(item):
         "price": str(item.price),
         "supplier": item.supplier,
         "created_by": item.created_by.username,
+        "status": item.status,
+        "reported_missing_by": item.reported_missing_by.username if item.reported_missing_by else None,
+        "reported_missing_at": item.reported_missing_at.isoformat() if item.reported_missing_at else None,
     }
 
 
@@ -326,6 +328,53 @@ def inventory_delete_view(request, item_id):
     return JsonResponse({"success": True, "message": "Item deleted"})
 
 
+@csrf_exempt
+def inventory_report_status_view(request, item_id):
+    """PATCH: Report an item as missing or found."""
+    if request.method != "PATCH":
+        return JsonResponse({"message": "Only PATCH allowed"}, status=405)
+
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    try:
+        item = InventoryItem.objects.get(item_id=item_id)
+    except InventoryItem.DoesNotExist:
+        return JsonResponse({"message": "Item not found"}, status=404)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+    new_status = data.get("status", "").strip().lower()
+
+    if new_status not in ["missing", "available"]:
+        return JsonResponse(
+            {"message": "Status must be 'missing' or 'available'"},
+            status=400,
+        )
+
+    if new_status == "missing":
+        item.status = "missing"
+        item.reported_missing_by = request.user
+        item.reported_missing_at = timezone.now()
+        message = f"'{item.name}' reported as missing"
+    else:
+        item.status = "available"
+        item.reported_missing_by = None
+        item.reported_missing_at = None
+        message = f"'{item.name}' marked as found"
+
+    item.save()
+
+    return JsonResponse({
+        "success": True,
+        "message": message,
+        "item": _serialize_item(item),
+    })
+
+
 def _serialize_request(req):
     """Helper to serialize a MaterialRequest to dict."""
     return {
@@ -441,8 +490,23 @@ def request_update_view(request, request_id):
             status=400,
         )
 
+    # Enforce valid status transitions
+    current = mat_request.status
+    valid_transitions = {
+        "pending": ["approved", "denied"],
+        "approved": ["fulfilled"],
+        "denied": [],  # Terminal state
+        "fulfilled": [],  # Terminal state
+    }
+
+    if new_status not in valid_transitions.get(current, []):
+        return JsonResponse(
+            {"message": f"Cannot change status from '{current}' to '{new_status}'"},
+            status=400,
+        )
+
     # On approval, deduct from inventory if there's enough quantity
-    if new_status == "approved" and mat_request.status == "pending":
+    if new_status == "approved" and current == "pending":
         item = mat_request.item
         if item.quantity < mat_request.quantity_requested:
             return JsonResponse(
@@ -485,6 +549,7 @@ def _serialize_delivery(delivery):
         "jobsite_id": delivery.jobsite_id,
         "jobsite_name": delivery.jobsite.name if delivery.jobsite_id else None,
         "notes": delivery.notes,
+        "packing_slip_url": delivery.packing_slip_photo.url if delivery.packing_slip_photo else None,
         "received_at": delivery.received_at.isoformat(),
         "items": items,
         "item_count": len(items),
@@ -782,5 +847,53 @@ def jobsite_detail_view(request, jobsite_id):
     if request.method == "DELETE":
         jobsite.delete()
         return JsonResponse({"success": True, "message": "Jobsite deleted"})
+
+    return JsonResponse({"message": "Method not allowed"}, status=405)
+
+
+@csrf_exempt
+def delivery_packing_slip_upload_view(request, delivery_id):
+    """POST: Upload a packing slip photo for a delivery."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    try:
+        delivery = Delivery.objects.get(delivery_id=delivery_id)
+    except Delivery.DoesNotExist:
+        return JsonResponse({"message": "Delivery not found"}, status=404)
+
+    if request.method == "POST":
+        if "photo" not in request.FILES:
+            return JsonResponse({"message": "No photo file provided"}, status=400)
+
+        photo = request.FILES["photo"]
+
+        # Validate file type
+        allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+        if photo.content_type not in allowed_types:
+            return JsonResponse(
+                {"message": "Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image."},
+                status=400,
+            )
+
+        # Delete old photo if exists
+        if delivery.packing_slip_photo:
+            delivery.packing_slip_photo.delete(save=False)
+
+        delivery.packing_slip_photo = photo
+        delivery.save()
+
+        return JsonResponse({
+            "success": True,
+            "message": "Packing slip uploaded successfully",
+            "delivery": _serialize_delivery(delivery),
+        })
+
+    if request.method == "DELETE":
+        if delivery.packing_slip_photo:
+            delivery.packing_slip_photo.delete(save=False)
+            delivery.packing_slip_photo = None
+            delivery.save()
+        return JsonResponse({"success": True, "message": "Packing slip removed"})
 
     return JsonResponse({"message": "Method not allowed"}, status=405)

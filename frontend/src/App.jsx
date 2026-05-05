@@ -9,7 +9,7 @@ import DeliveriesPage from "./pages/DeliveriesPage";
 import AccountPage from "./pages/AccountPage";
 import AdminPage from "./pages/AdminPage";
 import JobsitesPage from "./pages/JobsitesPage";
-import { apiFetch } from "./api";
+import { apiFetch, apiUpload } from "./api";
 
 function App() {
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -381,6 +381,34 @@ function App() {
     }
   };
 
+  const handleUploadPackingSlip = async (deliveryId, file) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("photo", file);
+
+      const res = await apiUpload(`/api/deliveries/${deliveryId}/packing-slip/`, formData);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not upload packing slip");
+        return false;
+      }
+
+      // Update the delivery in state with the new photo URL
+      setDeliveries((prev) =>
+        prev.map((d) => (d.delivery_id === deliveryId ? data.delivery : d))
+      );
+      setMessage(data.message);
+      return true;
+    } catch {
+      setError("Could not connect to server");
+      return false;
+    }
+  };
+
   const handleReassignItem = async (itemId, payload) => {
     setError("");
     setMessage("");
@@ -395,6 +423,34 @@ function App() {
 
       if (!res.ok) {
         setError(data.message || "Could not reassign item");
+        return false;
+      }
+
+      setInventoryItems((prev) =>
+        prev.map((item) => (item.item_id === itemId ? data.item : item))
+      );
+      setMessage(data.message);
+      return true;
+    } catch {
+      setError("Could not connect to server");
+      return false;
+    }
+  };
+
+  const handleReportItemStatus = async (itemId, status) => {
+    setError("");
+    setMessage("");
+
+    try {
+      const res = await apiFetch(`/api/inventory/${itemId}/status/`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Could not update item status");
         return false;
       }
 
@@ -464,6 +520,7 @@ function App() {
               onAddItem={handleAddItem}
               onDeleteItem={handleDeleteItem}
               onReassignItem={handleReassignItem}
+              onReportItemStatus={handleReportItemStatus}
               onCreateRequest={handleCreateRequest}
               message={message}
               error={error}
@@ -483,6 +540,7 @@ function App() {
               onLogout={handleLogout}
               materialRequests={materialRequests}
               onLoadRequests={handleLoadRequests}
+              onUpdateRequestStatus={handleUpdateRequestStatus}
               message={message}
               error={error}
             />
@@ -505,6 +563,7 @@ function App() {
               onCreateDelivery={handleCreateDelivery}
               onLoadInventory={handleLoadInventory}
               onLoadJobsites={handleLoadJobsites}
+              onUploadPackingSlip={handleUploadPackingSlip}
               message={message}
               error={error}
             />

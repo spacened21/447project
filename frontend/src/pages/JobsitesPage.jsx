@@ -277,8 +277,7 @@ function JobsitesPage({
                   </thead>
                   <tbody>
                     {sortedJobsites.map((js) => {
-                      const isSelected =
-                        selectedJobsiteId === js.jobsite_id;
+                      const isSelected = selectedJobsiteId === js.jobsite_id;
                       return (
                         <tr key={js.jobsite_id}>
                           <td>

@@ -1,5 +1,14 @@
 import { useState, useEffect } from "react";
 import Header from "../components/Header";
+import { API_BASE } from "../api";
+
+// Camera icon for packing slip upload
+const CameraIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </svg>
+);
 
 function DeliveriesPage({
   loggedInUser,
@@ -10,10 +19,12 @@ function DeliveriesPage({
   onCreateDelivery,
   onLoadInventory,
   onLoadJobsites,
+  onUploadPackingSlip,
   message,
   error,
 }) {
   const [showForm, setShowForm] = useState(false);
+  const [uploadingId, setUploadingId] = useState(null);
   const [supplier, setSupplier] = useState("");
   const [location, setLocation] = useState("warehouse");
   const [jobsiteId, setJobsiteId] = useState("");
@@ -105,6 +116,23 @@ function DeliveriesPage({
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const handlePackingSlipClick = (deliveryId) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = (e) => handlePackingSlipChange(e, deliveryId);
+    input.click();
+  };
+
+  const handlePackingSlipChange = async (e, deliveryId) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingId(deliveryId);
+    await onUploadPackingSlip(deliveryId, file);
+    setUploadingId(null);
   };
 
   return (
@@ -322,6 +350,7 @@ function DeliveriesPage({
                       <th>Date</th>
                       <th>Supplier</th>
                       <th>Location</th>
+                      <th>Packing Slip</th>
                       <th>Items</th>
                       <th>Total Qty</th>
                       <th>Received By</th>
@@ -341,6 +370,28 @@ function DeliveriesPage({
                               ? `Jobsite: ${delivery.jobsite_name}`
                               : delivery.location}
                           </span>
+                        </td>
+                        <td>
+                          <button
+                            className="packing-slip-btn"
+                            onClick={() => handlePackingSlipClick(delivery.delivery_id)}
+                            disabled={uploadingId === delivery.delivery_id}
+                            title={delivery.packing_slip_url ? "View/Replace packing slip" : "Upload packing slip"}
+                          >
+                            {uploadingId === delivery.delivery_id ? (
+                              <span className="photo-loading">...</span>
+                            ) : delivery.packing_slip_url ? (
+                              <img
+                                src={`${API_BASE}${delivery.packing_slip_url}`}
+                                alt="Packing slip"
+                                className="packing-slip-thumb"
+                              />
+                            ) : (
+                              <span className="photo-placeholder">
+                                <CameraIcon />
+                              </span>
+                            )}
+                          </button>
                         </td>
                         <td>
                           <span className="delivery-items-preview">

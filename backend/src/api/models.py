@@ -44,6 +44,11 @@ class InventoryItem(models.Model):
         ("jobsite", "Jobsite"),
     ]
 
+    STATUS_CHOICES = [
+        ("available", "Available"),
+        ("missing", "Missing"),
+    ]
+
     item_id = models.AutoField(primary_key=True)
 
     name = models.CharField(max_length=255)
@@ -63,6 +68,17 @@ class InventoryItem(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
     supplier = models.CharField(max_length=255)
+
+    # Status tracking for misplaced items
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="available")
+    reported_missing_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="items_reported_missing",
+    )
+    reported_missing_at = models.DateTimeField(null=True, blank=True)
 
     created_by = models.ForeignKey(
     CustomUser,
@@ -91,6 +107,7 @@ class Delivery(models.Model):
         related_name="deliveries",
     )
     notes = models.TextField(blank=True, default="")
+    packing_slip_photo = models.ImageField(upload_to="packing_slips/", blank=True, null=True)
     received_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

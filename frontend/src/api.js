@@ -12,3 +12,15 @@ export async function apiFetch(path, options = {}) {
 
   return response;
 }
+
+// For file uploads - don't set Content-Type (browser sets it with multipart boundary)
+export async function apiUpload(path, formData, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
+    method: "POST",
+    body: formData,
+    ...options,
+  });
+
+  return response;
+}

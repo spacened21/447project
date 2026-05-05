@@ -23,6 +23,7 @@ function InventoryPage({
   onAddItem,
   onDeleteItem,
   onReassignItem,
+  onReportItemStatus,
   onCreateRequest,
   message,
   error,
@@ -489,6 +490,7 @@ function InventoryPage({
                       <th>Description</th>
                       <th>Type</th>
                       <th>Location</th>
+                      <th>Status</th>
                       <th>Quantity</th>
                       <th>Price</th>
                       <th>Supplier</th>
@@ -498,7 +500,7 @@ function InventoryPage({
                   </thead>
                   <tbody>
                     {filteredItems.map((item) => (
-                      <tr key={item.item_id}>
+                      <tr key={item.item_id} className={item.status === "missing" ? "row--missing" : ""}>
                         <td className="mono">#{item.item_id}</td>
                         <td>
                           <strong>{item.name}</strong>
@@ -522,6 +524,11 @@ function InventoryPage({
                               : item.location}
                           </span>
                         </td>
+                        <td>
+                          <span className={`badge ${item.status === "missing" ? "badge--missing" : "badge--available"}`}>
+                            {item.status === "missing" ? "Missing" : "Available"}
+                          </span>
+                        </td>
                         <td className="mono">{item.quantity}</td>
                         <td className="mono">${item.price}</td>
                         <td>{item.supplier}</td>
@@ -531,6 +538,21 @@ function InventoryPage({
                           </span>
                         </td>
                         <td className="actions-cell">
+                          {item.status === "missing" ? (
+                            <button
+                              className="btn btn--success small-button"
+                              onClick={() => onReportItemStatus(item.item_id, "available")}
+                            >
+                              Mark Found
+                            </button>
+                          ) : (
+                            <button
+                              className="btn btn--warning small-button"
+                              onClick={() => onReportItemStatus(item.item_id, "missing")}
+                            >
+                              Report Missing
+                            </button>
+                          )}
                           <button
                             className="btn btn--request small-button"
                             onClick={() => handleOpenRequestModal(item)}
