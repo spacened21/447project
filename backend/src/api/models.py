@@ -69,6 +69,9 @@ class InventoryItem(models.Model):
 
     supplier = models.CharField(max_length=255)
 
+    # Photo of the item
+    photo = models.ImageField(upload_to="inventory_photos/", blank=True, null=True)
+
     # Status tracking for misplaced items
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="available")
     reported_missing_by = models.ForeignKey(
@@ -143,6 +146,7 @@ class MaterialRequest(models.Model):
         ("approved", "Approved"),
         ("denied", "Denied"),
         ("fulfilled", "Fulfilled"),
+        ("cancelled", "Cancelled"),
     ]
 
     request_id = models.AutoField(primary_key=True)
@@ -151,12 +155,25 @@ class MaterialRequest(models.Model):
         on_delete=models.CASCADE,
         related_name="material_requests"
     )
+    # For existing inventory items
     item = models.ForeignKey(
         InventoryItem,
         on_delete=models.CASCADE,
-        related_name="requests"
+        related_name="requests",
+        null=True,
+        blank=True,
     )
+    # For new item requests (not yet in inventory)
+    new_item_name = models.CharField(max_length=255, blank=True, default="")
+    new_item_type = models.CharField(max_length=20, choices=InventoryItem.ITEM_TYPES, blank=True, default="")
     quantity_requested = models.PositiveIntegerField()
+    jobsite = models.ForeignKey(
+        Jobsite,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="material_requests"
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)

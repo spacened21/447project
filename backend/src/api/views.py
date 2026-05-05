@@ -143,6 +143,7 @@ def _serialize_item(item):
         "status": item.status,
         "reported_missing_by": item.reported_missing_by.username if item.reported_missing_by else None,
         "reported_missing_at": item.reported_missing_at.isoformat() if item.reported_missing_at else None,
+        "photo_url": item.photo.url if item.photo else None,
     }
 
 
@@ -190,9 +191,9 @@ def inventory_add_view(request):
     price = data.get("price")
     supplier = data.get("supplier", "").strip()
 
-    if not name or not description or not supplier:
+    if not name or not supplier:
         return JsonResponse(
-            {"message": "Name, description, and supplier are required"},
+            {"message": "Name and supplier are required"},
             status=400,
         )
 
@@ -259,6 +260,95 @@ def inventory_add_view(request):
 
 
 @csrf_exempt
+def inventory_update_view(request, item_id):
+    """PUT: Update an inventory item's details."""
+    if request.method != "PUT":
+        return JsonResponse({"message": "Only PUT allowed"}, status=405)
+
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    try:
+        item = InventoryItem.objects.get(item_id=item_id)
+    except InventoryItem.DoesNotExist:
+        return JsonResponse({"message": "Item not found"}, status=404)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+    # Update fields if provided
+    if "name" in data:
+        name = data.get("name", "").strip()
+        if not name:
+            return JsonResponse({"message": "Name cannot be empty"}, status=400)
+        item.name = name
+
+    if "description" in data:
+        item.description = data.get("description", "").strip()
+
+    if "type" in data:
+        item_type = data.get("type", "").strip().lower()
+        if item_type not in ["material", "equipment"]:
+            return JsonResponse({"message": "Type must be 'material' or 'equipment'"}, status=400)
+        item.type = item_type
+
+    if "quantity" in data:
+        try:
+            quantity = int(data.get("quantity"))
+            if quantity < 0:
+                return JsonResponse({"message": "Quantity cannot be negative"}, status=400)
+            item.quantity = quantity
+        except (TypeError, ValueError):
+            return JsonResponse({"message": "Quantity must be an integer"}, status=400)
+
+    if "price" in data:
+        try:
+            price = Decimal(str(data.get("price")))
+            if price < 0:
+                return JsonResponse({"message": "Price cannot be negative"}, status=400)
+            item.price = price
+        except Exception:
+            return JsonResponse({"message": "Price must be a number"}, status=400)
+
+    if "supplier" in data:
+        item.supplier = data.get("supplier", "").strip()
+
+    # Handle location and jobsite together
+    if "location" in data:
+        location = str(data.get("location", "")).strip().lower()
+        if location not in ["warehouse", "yard", "jobsite"]:
+            return JsonResponse(
+                {"message": "Location must be 'warehouse', 'yard', or 'jobsite'"},
+                status=400,
+            )
+        item.location = location
+
+        if location == "jobsite":
+            jobsite_id = data.get("jobsite_id")
+            if not jobsite_id:
+                return JsonResponse(
+                    {"message": "jobsite_id is required when location is 'jobsite'"},
+                    status=400,
+                )
+            try:
+                item.jobsite = Jobsite.objects.get(jobsite_id=int(jobsite_id))
+            except (Jobsite.DoesNotExist, TypeError, ValueError):
+                return JsonResponse({"message": "Jobsite not found"}, status=404)
+        else:
+            item.jobsite = None
+
+    item.save()
+
+    return JsonResponse({
+        "success": True,
+        "message": "Item updated successfully",
+        "item": _serialize_item(item),
+    })
+
+
+@csrf_exempt
 def inventory_reassign_view(request, item_id):
     """PATCH: Reassign an item to a new location and/or jobsite."""
     if request.method != "PATCH":
@@ -311,10 +401,8 @@ def inventory_reassign_view(request, item_id):
 
 
 @csrf_exempt
-def inventory_delete_view(request, item_id):
-    if request.method != "DELETE":
-        return JsonResponse({"message": "Only DELETE allowed"}, status=405)
-
+def inventory_detail_view(request, item_id):
+    """GET: Get single item. PATCH: Update item. DELETE: Delete item."""
     if not request.user.is_authenticated:
         return JsonResponse({"message": "Login required"}, status=401)
 
@@ -323,9 +411,89 @@ def inventory_delete_view(request, item_id):
     except InventoryItem.DoesNotExist:
         return JsonResponse({"message": "Item not found"}, status=404)
 
-    item.delete()
+    if request.method == "GET":
+        return JsonResponse({"item": _serialize_item(item)})
 
-    return JsonResponse({"success": True, "message": "Item deleted"})
+    if request.method == "PATCH":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+        # Update fields if provided
+        if "name" in data:
+            name = data.get("name", "").strip()
+            if not name:
+                return JsonResponse({"message": "Name cannot be empty"}, status=400)
+            item.name = name
+
+        if "description" in data:
+            item.description = data.get("description", "").strip()
+
+        if "type" in data:
+            item_type = data.get("type", "").strip().lower()
+            if item_type not in ["material", "equipment"]:
+                return JsonResponse({"message": "Type must be 'material' or 'equipment'"}, status=400)
+            item.type = item_type
+
+        if "quantity" in data:
+            try:
+                quantity = int(data.get("quantity"))
+                if quantity < 0:
+                    return JsonResponse({"message": "Quantity cannot be negative"}, status=400)
+                item.quantity = quantity
+            except (TypeError, ValueError):
+                return JsonResponse({"message": "Quantity must be an integer"}, status=400)
+
+        if "price" in data:
+            try:
+                price = Decimal(str(data.get("price")))
+                if price < 0:
+                    return JsonResponse({"message": "Price cannot be negative"}, status=400)
+                item.price = price
+            except Exception:
+                return JsonResponse({"message": "Price must be a number"}, status=400)
+
+        if "supplier" in data:
+            item.supplier = data.get("supplier", "").strip()
+
+        # Handle location and jobsite together
+        if "location" in data:
+            location = str(data.get("location", "")).strip().lower()
+            if location not in ["warehouse", "yard", "jobsite"]:
+                return JsonResponse(
+                    {"message": "Location must be 'warehouse', 'yard', or 'jobsite'"},
+                    status=400,
+                )
+            item.location = location
+
+            if location == "jobsite":
+                jobsite_id = data.get("jobsite_id")
+                if not jobsite_id:
+                    return JsonResponse(
+                        {"message": "jobsite_id is required when location is 'jobsite'"},
+                        status=400,
+                    )
+                try:
+                    item.jobsite = Jobsite.objects.get(jobsite_id=int(jobsite_id))
+                except (Jobsite.DoesNotExist, TypeError, ValueError):
+                    return JsonResponse({"message": "Jobsite not found"}, status=404)
+            else:
+                item.jobsite = None
+
+        item.save()
+
+        return JsonResponse({
+            "success": True,
+            "message": "Item updated successfully",
+            "item": _serialize_item(item),
+        })
+
+    if request.method == "DELETE":
+        item.delete()
+        return JsonResponse({"success": True, "message": "Item deleted"})
+
+    return JsonResponse({"message": "Method not allowed"}, status=405)
 
 
 @csrf_exempt
@@ -377,13 +545,31 @@ def inventory_report_status_view(request, item_id):
 
 def _serialize_request(req):
     """Helper to serialize a MaterialRequest to dict."""
+    # Determine item info based on whether it's an existing or new item request
+    if req.item:
+        item_id = req.item.item_id
+        item_name = req.item.name
+        item_type = req.item.type
+        is_new_item = False
+    else:
+        item_id = None
+        item_name = req.new_item_name
+        item_type = req.new_item_type
+        is_new_item = True
+
     return {
         "request_id": req.request_id,
         "requester": req.requester.username,
         "requester_id": req.requester.id,
-        "item_id": req.item.item_id,
-        "item_name": req.item.name,
+        "item_id": item_id,
+        "item_name": item_name,
+        "item_type": item_type,
+        "is_new_item": is_new_item,
+        "new_item_name": req.new_item_name,  # Always include these fields
+        "new_item_type": req.new_item_type,
         "quantity_requested": req.quantity_requested,
+        "jobsite_id": req.jobsite_id,
+        "jobsite_name": req.jobsite.name if req.jobsite else None,
         "status": req.status,
         "notes": req.notes,
         "created_at": req.created_at.isoformat(),
@@ -415,16 +601,26 @@ def request_list_create_view(request):
             return JsonResponse({"message": "Invalid JSON"}, status=400)
 
         item_id = data.get("item_id")
+        new_item_name = data.get("new_item_name", "").strip()
+        new_item_type = data.get("new_item_type", "material").strip().lower()
         quantity_requested = data.get("quantity_requested")
+        jobsite_id = data.get("jobsite_id")
         notes = data.get("notes", "").strip()
 
-        if not item_id:
-            return JsonResponse({"message": "item_id is required"}, status=400)
+        # Must provide either item_id OR new_item_name
+        if not item_id and not new_item_name:
+            return JsonResponse({"message": "Either item_id or new_item_name is required"}, status=400)
 
-        try:
-            item = InventoryItem.objects.get(item_id=item_id)
-        except InventoryItem.DoesNotExist:
-            return JsonResponse({"message": "Item not found"}, status=404)
+        item = None
+        if item_id:
+            try:
+                item = InventoryItem.objects.get(item_id=item_id)
+            except InventoryItem.DoesNotExist:
+                return JsonResponse({"message": "Item not found"}, status=404)
+
+        # Validate new_item_type if requesting new item
+        if new_item_name and new_item_type not in ["material", "equipment"]:
+            new_item_type = "material"
 
         try:
             quantity_requested = int(quantity_requested)
@@ -434,10 +630,21 @@ def request_list_create_view(request):
         if quantity_requested <= 0:
             return JsonResponse({"message": "quantity_requested must be positive"}, status=400)
 
+        # Validate jobsite if provided
+        jobsite = None
+        if jobsite_id:
+            try:
+                jobsite = Jobsite.objects.get(jobsite_id=int(jobsite_id))
+            except (Jobsite.DoesNotExist, TypeError, ValueError):
+                return JsonResponse({"message": "Jobsite not found"}, status=404)
+
         new_request = MaterialRequest.objects.create(
             requester=request.user,
             item=item,
+            new_item_name=new_item_name if not item else "",
+            new_item_type=new_item_type if not item else "",
             quantity_requested=quantity_requested,
+            jobsite=jobsite,
             notes=notes,
         )
 
@@ -484,19 +691,20 @@ def request_update_view(request, request_id):
 
     new_status = data.get("status", "").strip().lower()
 
-    if new_status not in ["approved", "denied", "fulfilled"]:
+    if new_status not in ["approved", "denied", "fulfilled", "cancelled"]:
         return JsonResponse(
-            {"message": "Status must be 'approved', 'denied', or 'fulfilled'"},
+            {"message": "Status must be 'approved', 'denied', 'fulfilled', or 'cancelled'"},
             status=400,
         )
 
     # Enforce valid status transitions
     current = mat_request.status
     valid_transitions = {
-        "pending": ["approved", "denied"],
-        "approved": ["fulfilled"],
+        "pending": ["approved", "denied", "cancelled"],
+        "approved": ["fulfilled", "cancelled"],
         "denied": [],  # Terminal state
         "fulfilled": [],  # Terminal state
+        "cancelled": [],  # Terminal state
     }
 
     if new_status not in valid_transitions.get(current, []):
@@ -505,16 +713,11 @@ def request_update_view(request, request_id):
             status=400,
         )
 
-    # On approval, deduct from inventory if there's enough quantity
-    if new_status == "approved" and current == "pending":
-        item = mat_request.item
-        if item.quantity < mat_request.quantity_requested:
-            return JsonResponse(
-                {"message": f"Insufficient inventory. Available: {item.quantity}"},
-                status=400,
-            )
-        item.quantity -= mat_request.quantity_requested
-        item.save()
+    # Note: Inventory is NOT deducted on approval.
+    # Approval just means "we'll handle this request."
+    # Inventory changes happen when:
+    # - Deliveries add stock
+    # - Fulfillment (via delivery) completes the request
 
     mat_request.status = new_status
     mat_request.reviewed_by = request.user
@@ -579,6 +782,7 @@ def delivery_list_create_view(request):
         jobsite_id = data.get("jobsite_id")
         notes = data.get("notes", "").strip()
         items = data.get("items", [])
+        fulfill_request_ids = data.get("fulfill_request_ids", [])
 
         if not supplier:
             return JsonResponse({"message": "Supplier is required"}, status=400)
@@ -668,11 +872,31 @@ def delivery_list_create_view(request):
                 description=description,
             )
 
+        # Fulfill any linked requests
+        fulfilled_requests = []
+        if fulfill_request_ids:
+            for req_id in fulfill_request_ids:
+                try:
+                    mat_request = MaterialRequest.objects.get(request_id=int(req_id))
+                    # Only fulfill if request is in approved status
+                    if mat_request.status == "approved":
+                        mat_request.status = "fulfilled"
+                        mat_request.reviewed_by = request.user
+                        mat_request.save()
+                        fulfilled_requests.append(mat_request.request_id)
+                except (MaterialRequest.DoesNotExist, TypeError, ValueError):
+                    pass
+
+        message = "Delivery logged successfully"
+        if fulfilled_requests:
+            message += f" and {len(fulfilled_requests)} request(s) fulfilled"
+
         return JsonResponse(
             {
                 "success": True,
-                "message": "Delivery logged successfully",
+                "message": message,
                 "delivery": _serialize_delivery(delivery),
+                "fulfilled_request_ids": fulfilled_requests,
             },
             status=201,
         )
@@ -680,8 +904,9 @@ def delivery_list_create_view(request):
     return JsonResponse({"message": "Method not allowed"}, status=405)
 
 
+@csrf_exempt
 def delivery_detail_view(request, delivery_id):
-    """GET: Get a single delivery by ID."""
+    """GET: Get a single delivery by ID. DELETE: Delete a delivery."""
     if not request.user.is_authenticated:
         return JsonResponse({"message": "Login required"}, status=401)
 
@@ -690,7 +915,14 @@ def delivery_detail_view(request, delivery_id):
     except Delivery.DoesNotExist:
         return JsonResponse({"message": "Delivery not found"}, status=404)
 
-    return JsonResponse({"delivery": _serialize_delivery(delivery)})
+    if request.method == "GET":
+        return JsonResponse({"delivery": _serialize_delivery(delivery)})
+
+    if request.method == "DELETE":
+        delivery.delete()
+        return JsonResponse({"success": True, "message": "Delivery deleted"})
+
+    return JsonResponse({"message": "Method not allowed"}, status=405)
 
 
 def _serialize_user(u):
@@ -895,5 +1127,53 @@ def delivery_packing_slip_upload_view(request, delivery_id):
             delivery.packing_slip_photo = None
             delivery.save()
         return JsonResponse({"success": True, "message": "Packing slip removed"})
+
+    return JsonResponse({"message": "Method not allowed"}, status=405)
+
+
+@csrf_exempt
+def inventory_photo_upload_view(request, item_id):
+    """POST: Upload a photo for an inventory item. DELETE: Remove the photo."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"message": "Login required"}, status=401)
+
+    try:
+        item = InventoryItem.objects.get(item_id=item_id)
+    except InventoryItem.DoesNotExist:
+        return JsonResponse({"message": "Item not found"}, status=404)
+
+    if request.method == "POST":
+        if "photo" not in request.FILES:
+            return JsonResponse({"message": "No photo file provided"}, status=400)
+
+        photo = request.FILES["photo"]
+
+        # Validate file type
+        allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+        if photo.content_type not in allowed_types:
+            return JsonResponse(
+                {"message": "Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image."},
+                status=400,
+            )
+
+        # Delete old photo if exists
+        if item.photo:
+            item.photo.delete(save=False)
+
+        item.photo = photo
+        item.save()
+
+        return JsonResponse({
+            "success": True,
+            "message": "Photo uploaded successfully",
+            "item": _serialize_item(item),
+        })
+
+    if request.method == "DELETE":
+        if item.photo:
+            item.photo.delete(save=False)
+            item.photo = None
+            item.save()
+        return JsonResponse({"success": True, "message": "Photo removed"})
 
     return JsonResponse({"message": "Method not allowed"}, status=405)

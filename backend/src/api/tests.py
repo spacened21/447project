@@ -167,8 +167,8 @@ class RequestStatusTransitionTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_approval_deducts_inventory(self):
-        """Approving a request should deduct from inventory."""
+    def test_approval_does_not_deduct_inventory(self):
+        """Approving a request should NOT deduct from inventory (handled by deliveries)."""
         original_qty = self.item.quantity
 
         response = self.client.patch(
@@ -179,10 +179,11 @@ class RequestStatusTransitionTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
         self.item.refresh_from_db()
-        self.assertEqual(self.item.quantity, original_qty - self.request.quantity_requested)
+        # Inventory should remain unchanged - deduction happens via deliveries
+        self.assertEqual(self.item.quantity, original_qty)
 
-    def test_approval_insufficient_inventory(self):
-        """Should reject approval if not enough inventory."""
+    def test_approval_allowed_regardless_of_inventory(self):
+        """Approval should succeed even with high quantity (inventory managed separately)."""
         self.request.quantity_requested = 999
         self.request.save()
 
@@ -191,8 +192,8 @@ class RequestStatusTransitionTests(TestCase):
             data=json.dumps({"status": "approved"}),
             content_type="application/json",
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Insufficient", response.json().get("message", ""))
+        # Approval is allowed - inventory tracking is separate
+        self.assertEqual(response.status_code, 200)
 
 
 class InventoryEdgeCaseTests(TestCase):
